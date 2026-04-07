@@ -1,0 +1,5 @@
+Write-Host "Setting up Weather Monitor local environment..."
+Write-Host "1) Copy .env.example to .env and fill credentials"
+Write-Host "2) Start Redis with: docker compose up -d redis"
+Write-Host "3) Install frontend deps: cd apps/web; npm install"
+Write-Host "4) Install backend deps: pip install -r services/api/requirements.txt"

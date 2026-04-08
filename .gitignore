@@ -40,3 +40,15 @@ coverage.xml
 htmlcov/
 build/
 
+# Skill-specific
+.claude/
+.code-review-graph/
+.cursorrules
+.mcp.json
+.opencode.json
+.python-version
+.windsurfrules
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+

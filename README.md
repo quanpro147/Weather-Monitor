@@ -38,8 +38,9 @@ Buoc 1: Tao file moi truong
 - Sao chep .env.example thanh .env
 - Dien API key va thong tin ket noi can thiet
 
-Buoc 2: Khoi dong Redis
-- docker compose up -d redis
+Buoc 2: Khoi dong ha tang (Database, Redis, Data Pipeline ngam)
+- docker-compose up --build -d
+- Kiem tra log cua pipeline: docker-compose logs -f pipeline
 
 Buoc 3: Cai frontend
 - cd apps/web
@@ -50,8 +51,10 @@ Buoc 4: Cai backend API
 - pip install -r services/api/requirements.txt
 - uvicorn services.api.main:app --reload --host 0.0.0.0 --port 8000
 
-Buoc 5: Data pipeline (co ban)
-- pip install -r data-pipeline/requirements.txt
+Buoc 5: Data pipeline (Thu thap du lieu lich su)
+- Chay lenh sau (1 lan duy nhat) de lay du lieu tu nam 2017 toi nay bang Docker:
+- docker-compose exec pipeline python fetchers/collectData.py
+- Luu y: Pipeline real-time se tu dong chay ngam cap nhat DB moi 7 ngay (da duoc khoi dong cung DB o Buoc 2).
 
 ## 5) Vai tro team (4 nguoi)
 

@@ -1,12 +1,32 @@
-version: "3.9"
-
 services:
-  redis:
-    image: redis:7-alpine
-    container_name: weather-monitor-redis
+  db:
+    image: postgres:15-alpine
+    container_name: weather-monitor-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: Intelligent_Data_Analysis
+      POSTGRES_DB: weather
     ports:
-      - "6379:6379"
+      - "5432:5432"
     volumes:
-      - ./infra/redis/redis.conf:/usr/local/etc/redis/redis.conf
-    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/supabase/schema.sql:/docker-entrypoint-initdb.d/init.sql
+
+  pipeline:
+    build:
+      context: .
+      dockerfile: data-pipeline/Dockerfile
+    container_name: weather-data-pipeline
+    depends_on:
+      - db
+    environment:
+      - DB_USER=postgres
+      - DB_PASSWORD=Intelligent_Data_Analysis
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_DBNAME=weather
+    restart: unless-stopped
+
+volumes:
+  pgdata:
 

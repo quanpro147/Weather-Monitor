@@ -17,14 +17,13 @@ services:
       context: .
       dockerfile: data-pipeline/Dockerfile
     container_name: weather-data-pipeline
-    depends_on:
-      - db
     environment:
-      - DB_USER=postgres
-      - DB_PASSWORD=Intelligent_Data_Analysis
-      - DB_HOST=db
-      - DB_PORT=5432
-      - DB_DBNAME=weather
+      - DB_USER=postgres.lzkbkkhhuyvefjqemdtk
+      - DB_PASSWORD=Trunghieu06012005
+      - DB_HOST=aws-1-ap-northeast-2.pooler.supabase.com
+      - DB_PORT=6543
+      - DB_NAME=postgres
+      - PYTHONUNBUFFERED=1
     restart: unless-stopped
 
 volumes:

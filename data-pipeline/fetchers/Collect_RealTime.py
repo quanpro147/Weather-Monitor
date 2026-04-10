@@ -2,11 +2,13 @@ import os
 import time
 import datetime
 import pandas as pd
-import openmeteo_requests
-import requests_cache
-from retry_requests import retry
+import requests
 import psycopg2
 from psycopg2.extras import execute_values
+from dotenv import load_dotenv
+
+# Nạp các biến môi trường từ file .env (nếu có lúc chạy ở ngoài Docker)
+load_dotenv()
 
 # Setup DB connection
 DB_USER = os.getenv("DB_USER", "postgres")
@@ -28,7 +30,7 @@ def setup_cities(conn, cities_df):
     cursor = conn.cursor()
     cities_data = []
     for _, row in cities_df.iterrows():
-        cities_data.append((row['CityId'], row['City'], row['Country'], row['Latitude'], row['Longitude']))
+        cities_data.append((row['ID'], row['City'], 'Vietnam', row['Latitude'], row['Longitude']))
     query = """
         INSERT INTO public.cities (city_id, city, country, latitude, longitude)
         VALUES %s
@@ -40,109 +42,155 @@ def setup_cities(conn, cities_df):
 
 def main():
     print(f"[{datetime.datetime.now()}] Starting data collection...")
-    cache_session = requests_cache.CachedSession('.cache', expire_after=3600)
-    retry_session = retry(cache_session, retries=5, backoff_factor=0.2)
-    openmeteo = openmeteo_requests.Client(session=retry_session)
-
-    # Đọc file city_id.csv
-    csv_path = os.path.join(os.path.dirname(__file__), 'city_id.csv')
+    
+    # Đọc file VietNam.csv
+    csv_path = os.path.join(os.path.dirname(__file__), 'VietNam.csv')
     cities_df = pd.read_csv(csv_path)
 
     conn = get_db_connection()
     setup_cities(conn, cities_df)
-
     end_date = datetime.date.today() - datetime.timedelta(days=1)
     
     cursor = conn.cursor()
+    cursor.execute("SELECT city_id, MAX(date) FROM public.weather_daily GROUP BY city_id")
+    city_latest_dates = {row[0]: row[1] for row in cursor.fetchall()}
+    
+    needs_update = False
+    for _, row in cities_df.iterrows():
+        city_id = int(row['ID'])
+        latest_date = city_latest_dates.get(city_id)
+        if not latest_date or (datetime.date.today() - latest_date).days >= 2:
+            needs_update = True
+            break
+            
+    if not needs_update:
+        print(f"[{datetime.datetime.now()}] Dữ liệu đã là mới nhất (chênh lệch < 2 ngày). Tạm hoãn chạy để chờ lần sau!")
+        cursor.close()
+        conn.close()
+        return
+    
+    print("Checking which cities need updates...")
+
     # Lấy thông tin thời tiết
     for _, row in cities_df.iterrows():
-        city_id = row['CityId']
+        city_id = int(row['ID'])
         lat = row['Latitude']
         lon = row['Longitude']
-
-        # Tìm ngày tiếp theo cần lấy dữ liệu cho thành phố này
-        cursor.execute("SELECT MAX(date) FROM public.weather_daily WHERE city_id = %s", (city_id,))
-        result = cursor.fetchone()[0]
-        start_date = (result + datetime.timedelta(days=1)) if result else datetime.date(2017, 1, 1)
-
-        if start_date > end_date:
-            print(f"City {row['City']} (ID: {city_id}) is up to date.")
-            continue
+        latest_date = city_latest_dates.get(city_id)
+        if latest_date:
+            days_diff = (datetime.date.today() - latest_date).days
+            # Chỉ lấy thêm data cho thành phố nào trễ từ 2 ngày trở lên
+            if days_diff < 2:
+                continue
+            start_date = latest_date + datetime.timedelta(days=1)
+        else:
+            # Chưa từng có data -> lấy từ đầu 2020
+            start_date = datetime.date(2020, 1, 1)
 
         print(f"Fetching data for {row['City']} from {start_date} to {end_date}")
         url = "https://archive-api.open-meteo.com/v1/archive"
+        
+        daily_vars = [
+            "weather_code", "temperature_2m_max", "temperature_2m_min", "rain_sum", 
+            "shortwave_radiation_sum", "temperature_2m_mean", "wind_direction_10m_dominant", 
+            "wind_speed_10m_max", "relative_humidity_2m_mean", "relative_humidity_2m_max", 
+            "relative_humidity_2m_min", "wind_gusts_10m_max", "cloud_cover_max", 
+            "cloud_cover_min", "cloud_cover_mean", "wind_speed_10m_mean", "wind_gusts_10m_mean"
+        ]
+
         params = {
             "latitude": lat,
             "longitude": lon,
             "start_date": start_date.strftime("%Y-%m-%d"),
             "end_date": end_date.strftime("%Y-%m-%d"),
-            "daily": ["weather_code", "temperature_2m_max", "temperature_2m_min", "rain_sum", "shortwave_radiation_sum", "temperature_2m_mean", "wind_direction_10m_dominant", "wind_speed_10m_max", "relative_humidity_2m_mean", "relative_humidity_2m_max", "relative_humidity_2m_min", "wind_gusts_10m_max", "cloud_cover_max", "cloud_cover_min", "cloud_cover_mean", "wind_speed_10m_mean", "wind_gusts_10m_mean"],
+            "daily": ",".join(daily_vars),
             "timezone": "GMT",
         }
 
-        try:
-            responses = openmeteo.weather_api(url, params=params)
-            response = responses[0]
-            daily = response.Daily()
+        while True:
+            try:
+                response = requests.get(url, params=params)
+                
+                if response.status_code == 429:
+                    error_data = response.json()
+                    reason = error_data.get('reason', '')
+                    if 'Hourly' in reason:
+                        print(f"-> Hourly API limit exceeded. Tự động chờ 60 phút để tải lại {row['City']}...")
+                        time.sleep(3600)
+                        continue
+                    else:
+                        print(f"-> Minutely API limit exceeded. Tự động chờ 60 giây để tải lại {row['City']}...")
+                        time.sleep(60)
+                        continue
+                
+                response.raise_for_status()
+                data = response.json()
+                
+                if "daily" not in data:
+                    print(f"No data found for {row['City']}. Response: {data}")
+                    break
+                    
+                daily = data.get('daily', {})
+                dates = daily.get('time', [])
+                
+                if not dates:
+                    print(f"Empty dates for {row['City']}")
+                    break
 
-            dates = pd.date_range(
-                start=pd.to_datetime(daily.Time(), unit="s", utc=True),
-                end=pd.to_datetime(daily.TimeEnd(), unit="s", utc=True),
-                freq=pd.Timedelta(seconds=daily.Interval()),
-                inclusive="left"
-            ).date
+                def c(val):
+                    if val is None or pd.isna(val):
+                        return None
+                    return float(val)
 
-            v0 = daily.Variables(0).ValuesAsNumpy()
-            v1 = daily.Variables(1).ValuesAsNumpy()
-            v2 = daily.Variables(2).ValuesAsNumpy()
-            v3 = daily.Variables(3).ValuesAsNumpy()
-            v4 = daily.Variables(4).ValuesAsNumpy()
-            v5 = daily.Variables(5).ValuesAsNumpy()
-            v6 = daily.Variables(6).ValuesAsNumpy()
-            v7 = daily.Variables(7).ValuesAsNumpy()
-            v8 = daily.Variables(8).ValuesAsNumpy()
-            v9 = daily.Variables(9).ValuesAsNumpy()
-            v10 = daily.Variables(10).ValuesAsNumpy()
-            v11 = daily.Variables(11).ValuesAsNumpy()
-            v12 = daily.Variables(12).ValuesAsNumpy()
-            v13 = daily.Variables(13).ValuesAsNumpy()
-            v14 = daily.Variables(14).ValuesAsNumpy()
-            v15 = daily.Variables(15).ValuesAsNumpy()
-            v16 = daily.Variables(16).ValuesAsNumpy()
+                daily_data = []
+                for i in range(len(dates)):
+                    def get_val(key, idx):
+                        arr = daily.get(key, [])
+                        return arr[idx] if idx < len(arr) else None
+                    record = (
+                        city_id, 
+                        dates[i],
+                        c(get_val('weather_code', i)), 
+                        c(get_val('temperature_2m_max', i)), 
+                        c(get_val('temperature_2m_min', i)), 
+                        c(get_val('temperature_2m_mean', i)), 
+                        c(get_val('rain_sum', i)), 
+                        c(get_val('shortwave_radiation_sum', i)), 
+                        c(get_val('wind_direction_10m_dominant', i)), 
+                        c(get_val('wind_speed_10m_max', i)),
+                        c(get_val('wind_speed_10m_mean', i)), 
+                        c(get_val('wind_gusts_10m_max', i)), 
+                        c(get_val('wind_gusts_10m_mean', i)), 
+                        c(get_val('relative_humidity_2m_max', i)),
+                        c(get_val('relative_humidity_2m_min', i)), 
+                        c(get_val('relative_humidity_2m_mean', i)), 
+                        c(get_val('cloud_cover_max', i)), 
+                        c(get_val('cloud_cover_min', i)), 
+                        c(get_val('cloud_cover_mean', i))
+                    )
+                    daily_data.append(record)
 
-            def c(val):
-                if pd.isna(val):
-                    return None
-                return float(val)
-
-            daily_data = []
-            for i in range(len(dates)):
-                record = (
-                    city_id, dates[i],
-                    c(v0[i]), c(v1[i]), c(v2[i]), c(v5[i]), 
-                    c(v3[i]), c(v4[i]), c(v6[i]), c(v7[i]),
-                    c(v15[i]), c(v11[i]), c(v16[i]), c(v9[i]),
-                    c(v10[i]), c(v8[i]), c(v12[i]), c(v13[i]), c(v14[i])
-                )
-                daily_data.append(record)
-
-            insert_query = """
-                INSERT INTO public.weather_daily (
-                    city_id, date, weather_code, temperature_2m_max, temperature_2m_min, temperature_2m_mean, 
-                    rain_sum, shortwave_radiation_sum, wind_direction_10m_dominant, wind_speed_10m_max, 
-                    wind_speed_10m_mean, wind_gusts_10m_max, wind_gusts_10m_mean, relative_humidity_2m_max, 
-                    relative_humidity_2m_min, relative_humidity_2m_mean, cloud_cover_max, cloud_cover_min, cloud_cover_mean
-                ) VALUES %s
-                ON CONFLICT (city_id, date) DO NOTHING;
-            """
-            execute_values(cursor, insert_query, daily_data)
-            conn.commit()
-            print(f"Saved {len(daily_data)} records for {row['City']}")
+                insert_query = """
+                    INSERT INTO public.weather_daily (
+                        city_id, date, weather_code, temperature_2m_max, temperature_2m_min, temperature_2m_mean, 
+                        rain_sum, shortwave_radiation_sum, wind_direction_10m_dominant, wind_speed_10m_max, 
+                        wind_speed_10m_mean, wind_gusts_10m_max, wind_gusts_10m_mean, relative_humidity_2m_max, 
+                        relative_humidity_2m_min, relative_humidity_2m_mean, cloud_cover_max, cloud_cover_min, cloud_cover_mean
+                    ) VALUES %s
+                    ON CONFLICT (city_id, date) DO NOTHING;
+                """
+                execute_values(cursor, insert_query, daily_data)
+                conn.commit()
+                print(f"Saved {len(daily_data)} records for {row['City']}")
+                break
+                
+            except Exception as e:
+                print(f"Error fetching {row['City']}: {str(e)}")
+                if 'response' in locals() and hasattr(response, 'text'):
+                    print(f"Chi tiết lỗi API: {response.text}")
+                break
             
-        except Exception as e:
-            print(f"Error fetching {row['City']}: {e}")
-        
-        time.sleep(2.5) # Tránh bị rate limit của API (40 req/min)
+        time.sleep(3) 
 
     cursor.close()
     conn.close()
@@ -150,14 +198,10 @@ def main():
 
 if __name__ == "__main__":
     import schedule
-    
-    # Chạy lần đầu tiên ngay lập tức
     main()
     
-    # Cài đặt lịch trình chay mỗi 7 ngày
-    schedule.every(7).days.do(main)
-    
-    print("\nPipeline is now running in real-time mode. It will update data every 7 days.\n")
+    schedule.every(1).days.do(main)
+    print("\nPipeline is now running. Lịch trình sẽ tự kiểm tra mỗi ngày (đủ trễ 2 ngày mới lấy data).\n")
     while True:
         schedule.run_pending()
-        time.sleep(3600)  # Check timer mỗi giờ một lần
+        time.sleep(3600)  

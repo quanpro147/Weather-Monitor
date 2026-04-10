@@ -33,9 +33,6 @@ class Settings:
     openai_api_key: str | None = field(default_factory=lambda: os.getenv("OPENAI_API_KEY"))
     gemini_api_key: str | None = field(default_factory=lambda: os.getenv("GEMINI_API_KEY"))
 
-    # Data source APIs (optional — worker handles fetching, API reads from DB)
-    waqi_api_token: str | None = field(default_factory=lambda: os.getenv("WAQI_API_TOKEN"))
-    weatherapi_key: str | None = field(default_factory=lambda: os.getenv("WEATHERAPI_KEY"))
 
 
 settings = Settings()

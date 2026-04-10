@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Weather Monitor** — a Vietnamese weather monitoring web platform that collects, analyzes, and visualizes weather and air quality data across Vietnam. It integrates anomaly detection and LLM-generated summaries.
 
-Data sources: **WAQI** (air quality/AQI) and **WeatherAPI** (temperature, humidity, wind, UV, rain).
+Data source: **Open-Meteo Archive API** (weather — free, no API key required). AQI data not yet integrated.
 
 ## Repository Structure
 
@@ -71,17 +71,17 @@ python data-pipeline/processors/cleaner.py
 
 ### Data Flow
 ```
-WAQI API / WeatherAPI
+Open-Meteo Archive API  (free, no key)
         │
-   services/worker  (scheduled fetch)
+   data-pipeline/fetchers/  (psycopg2, scheduled via schedule lib)
         │
-   data-pipeline    (clean + normalize)
+   data-pipeline/processors/ (clean + normalize)
         │
    Supabase (PostgreSQL)  ← primary store for time-series data
         │
-   Redis cache            ← reduces DB load, handles rate limits
+   Redis cache            ← reduces DB load, reduces latency
         │
-   services/api (FastAPI) ← computation-heavy ML/AI logic
+   services/api (FastAPI) ← ML inference + AI summary generation
         │
    Supabase REST API      ← direct frontend queries
         │
@@ -91,13 +91,13 @@ WAQI API / WeatherAPI
 ### Key Design Decisions
 - **Supabase** handles auth, Row Level Security, and auto-generated REST API — frontend queries it directly for most reads.
 - **FastAPI** (`services/api`) is a separate microservice for ML inference and AI summary generation — not a general-purpose backend.
-- **Redis** caches responses to avoid hitting external API rate limits and reduce latency on the dashboard.
+- **Redis** caches API responses to reduce DB load and latency. Open-Meteo is free/unlimited so rate limiting is not a concern.
 - **LLM summaries** use prompt templates in `ml/prompts/` with Gemini or OpenAI (configured via env vars).
 
 ### Environment Variables
 See `.env.example` for all required variables:
-- `WAQI_API_TOKEN`, `WEATHERAPI_KEY` — external data APIs
-- `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` — database
+- `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_HOST`, `DB_PORT` — direct PostgreSQL for data-pipeline
+- `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` — database (FastAPI + frontend)
 - `REDIS_HOST`, `REDIS_PORT`, `REDIS_DB` — cache
 - `OPENAI_API_KEY`, `GEMINI_API_KEY` — LLM summarization
 - `APP_ENV`, `APP_PORT` — service config

@@ -1,12 +1,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.core.config import settings
-from app.routers import anomaly, cities, weather
+from services.api.app.core.config import settings
+from services.api.app.routers import anomaly, cities, weather
 
 app = FastAPI(title="Weather Monitor API")
 
-_dev_origins = ["http://localhost:3000"]
+_dev_origins = ["http://localhost:3000", "http://localhost:3001"]
+
 _prod_origins = ["https://weather-monitor.vercel.app"]  # TODO: cập nhật domain thật khi deploy
 
 origins = _dev_origins if settings.app_env == "development" else _prod_origins

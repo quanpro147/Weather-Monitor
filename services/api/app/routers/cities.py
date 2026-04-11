@@ -2,10 +2,10 @@ import json
 
 from fastapi import APIRouter, HTTPException, Query
 
-from app.core.cache import get_redis
-from app.core.database import get_supabase
-from app.models.city import City
-from app.models.common import ApiResponse
+from services.api.app.core.cache import get_redis
+from services.api.app.core.database import get_supabase
+from services.api.app.models.city import City
+from services.api.app.models.common import ApiResponse
 
 router = APIRouter(prefix="/cities", tags=["cities"])
 
@@ -27,6 +27,30 @@ def list_cities(country: str | None = Query(None, description="Filter by country
         query = query.eq("country", country)
 
     response = query.execute()
+    cities = [City(**row) for row in response.data]
+
+    cache.setex(cache_key, CACHE_TTL, json.dumps([c.model_dump() for c in cities]))
+    return ApiResponse(success=True, data=cities)
+
+
+@router.get("/search", response_model=ApiResponse[list[City]])
+def search_cities(q: str = Query(..., min_length=1, description="Keyword to search in city name")):
+    """Search cities by name (case-insensitive, partial match)."""
+    cache_key = f"cities:search:{q.lower()}"
+    cache = get_redis()
+
+    cached = cache.get(cache_key)
+    if cached:
+        return ApiResponse(success=True, data=json.loads(cached))
+
+    db = get_supabase()
+    response = (
+        db.table("cities")
+        .select("*")
+        .ilike("city", f"%{q}%")
+        .order("city")
+        .execute()
+    )
     cities = [City(**row) for row in response.data]
 
     cache.setex(cache_key, CACHE_TTL, json.dumps([c.model_dump() for c in cities]))

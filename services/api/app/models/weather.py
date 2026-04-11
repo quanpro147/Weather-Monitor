@@ -1,4 +1,5 @@
 import datetime
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -39,3 +40,47 @@ class WeatherDaily(BaseModel):
     weather_code: int | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class WeatherStats(BaseModel):
+    """Aggregated statistics for a city in a given month."""
+
+    month: str                          # YYYY-MM
+    avg_temperature: float | None       # °C mean
+    total_rainfall: float               # mm total
+    sunny_days_count: int               # rain=0 + cloud_cover_mean < 30%
+    rainy_days_count: int               # rain_sum > 1mm
+    max_wind_gust: float | None         # km/h
+    avg_humidity: float | None          # %
+    avg_wind_speed: float | None        # km/h
+
+
+class AdvisoryResponse(BaseModel):
+    """Rule-based weather advisory for a city."""
+
+    advice_text: str
+    risk_level: Literal["low", "medium", "high"]
+    based_on: dict[str, Any]            # weather snapshot used for the decision
+
+
+class CityWeatherCompare(BaseModel):
+    """Latest weather snapshot for one city — used in multi-city comparison."""
+
+    city_id: int
+    city_name: str
+    date: datetime.date | None = None
+    temperature_2m_mean: float | None = None
+    temperature_2m_max: float | None = None
+    rain_sum: float | None = None
+    wind_speed_10m_max: float | None = None
+    weather_code: int | None = None
+
+
+class ExtremeResult(BaseModel):
+    """City with the highest temperature or rainfall in a date range."""
+
+    city_id: int
+    city_name: str
+    value: float
+    type: str                           # "hottest" | "rainiest"
+    date: datetime.date

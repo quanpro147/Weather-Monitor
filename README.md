@@ -10,7 +10,6 @@ Dự án tập trung vào 4 mục tiêu chính:
 
 ## 1) Nguồn Dữ Liệu
 - **Open-Meteo Archive API**: Nhiệt độ, độ ẩm, sức gió, bức xạ mặt trời, mây che phủ, lượng mưa...
-- **WAQI (World Air Quality Index)**: Chỉ số chất lượng không khí (AQI).
 
 ## 2) Kiến Trúc Công Nghệ
 - **Frontend**: Next.js + React + Tailwind CSS
@@ -32,33 +31,133 @@ Dự án tập trung vào 4 mục tiêu chính:
 
 ## 4) Hướng Dẫn Khởi Động Nhanh (local)
 
-Bước 1: Tạo file môi trường
-- Sao chép `.env.example` thành `.env`
-- Điền API key và thông tin kết nối cần thiết
+### Bước 1: Tạo file môi trường
 
-Bước 2: Khởi động Hạ tầng và Data Pipeline ngầm
-- Cài đặt Database (PostgreSQL) thông qua Cloud Supabase. (Không cần chạy DB Server ở máy tính)
-- Chạy Pipeline thu thập dữ liệu bằng lệnh sau:
-- `docker-compose up --build -d`
-- Kiểm tra log cào dữ liệu của pipeline: `docker logs -f pipeline`
+```bash
+cp .env.example .env
+# Điền SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY
+# và DB_* (kết nối psycopg2 đến Supabase cloud) vào .env
+```
 
-Bước 2.5 (Tùy chọn): Đưa dữ liệu cũ lên Supabase
-- Nếu bạn là Admin và đang có sẵn 1 database cục bộ dung lượng lớn, muốn tải lên Supabase cho team dùng, hãy mở Terminal:
-- `python scripts/migrate_to_supabase.py`
-- Khi được hỏi, hãy nhập mật khẩu kết nối. Mọi dòng dữ liệu sẽ được đẩy lên Cloud.
+---
 
-Bước 3: Cài đặt Frontend
-- `cd apps/web`
-- `npm install`
-- `npm run dev`
+### Bước 2: Chạy hạ tầng bằng Docker
 
-Bước 4: Cài đặt Backend API
-- `pip install -r services/api/requirements.txt`
-- `uvicorn services.api.main:app --reload --host 0.0.0.0 --port 8000`
+> **Yêu cầu:** Docker Desktop đang chạy.
 
-Bước 5: Data pipeline (Hệ thống tự động cào dữ liệu)
-- Pipeline ngầm tự động đánh giá mỗi ngày 1 lần. Nếu dữ liệu thời tiết bị trễ từ 2 ngày trở lên, nó sẽ tự động gọi API lấy dữ liệu mới nhất.
-- Bạn có thể thao tác cục bộ kiểm tra, xóa bảng DB bằng Jupyter Notebook `se.ipynb` trong mục `data-pipeline/fetchers/`.
+**Chỉ khởi động Redis** (dùng khi dev backend local):
+
+```bash
+docker compose up -d redis
+```
+
+**Khởi động toàn bộ stack** (Redis + API + Data Pipeline):
+
+```bash
+docker compose up --build -d
+
+# Xem log pipeline:
+docker logs -f weather-data-pipeline
+
+# Xem log API:
+docker logs -f weather-monitor-api
+```
+
+> Lưu ý: Khi chạy trong Docker, đổi `REDIS_HOST=localhost` → `REDIS_HOST=redis` trong `.env`.
+
+---
+
+### Bước 3: Cài đặt môi trường Python bằng `uv`
+
+> **Yêu cầu:** Python 3.12. Dùng `uv` thay vì `pip` — nhanh hơn 10–100x, tự quản lý venv.
+
+**Cài `uv` (nếu chưa có):**
+
+```bash
+pip install uv
+# hoặc: winget install astral-sh.uv  (Windows)
+# hoặc: curl -LsSf https://astral.sh/uv/install.sh | sh  (macOS/Linux)
+```
+
+**Tạo venv Python 3.12 và cài dependencies:**
+
+```bash
+# Từ thư mục gốc repo
+uv venv --python 3.12
+uv pip install -r services/api/requirements.txt
+```
+
+**Kích hoạt venv:**
+
+```bash
+# Windows (PowerShell)
+.venv\Scripts\Activate.ps1
+
+# macOS / Linux
+source .venv/bin/activate
+```
+
+---
+
+### Bước 4: Chạy Backend API (dev local)
+
+> Đảm bảo Redis đang chạy (`docker compose up -d redis`) và venv đã kích hoạt.
+
+```bash
+uv run uvicorn services.api.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+API docs tại: [http://localhost:8000/docs](http://localhost:8000/docs)
+
+---
+
+### Bước 5: Chạy Frontend
+
+**Frontend demo/test** (`apps/test_web` — port 3001):
+
+```bash
+cd apps/test_web
+npm install
+```
+
+Tạo file `.env.local`:
+
+```
+NEXT_PUBLIC_SUPABASE_URL=<supabase_url>
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<supabase_anon_key>
+NEXT_PUBLIC_API_URL=http://localhost:8000
+```
+
+```bash
+npm run dev
+# Mở http://localhost:3001
+```
+
+**Frontend chính** (`apps/web` — port 3000, khi đã phát triển):
+
+```bash
+cd apps/web
+npm install
+npm run dev
+```
+
+---
+
+### Bước 6 (Tùy chọn): Đưa dữ liệu cũ lên Supabase
+
+Nếu bạn là Admin và đang có sẵn database cục bộ muốn tải lên Supabase cho team dùng:
+
+```bash
+python scripts/migrate_to_supabase.py
+```
+
+---
+
+### Bước 7: Data pipeline (Hệ thống tự động cào dữ liệu)
+
+Pipeline (`data-pipeline/fetchers/Collect_RealTime.py`) tự động chạy mỗi ngày — nếu dữ liệu thời tiết bị trễ từ 2 ngày trở lên, nó sẽ tự động gọi Open-Meteo API lấy dữ liệu mới nhất. Chạy 24/7 qua Docker (`weather-data-pipeline` container).
+
+Để kiểm tra dữ liệu hoặc thao tác DB thủ công: dùng Jupyter Notebook `se.ipynb` trong `data-pipeline/fetchers/`.
 
 ## 5) Vai Trò Team (4 người)
 

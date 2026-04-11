@@ -3,11 +3,11 @@ import json
 
 from fastapi import APIRouter, HTTPException, Query
 
-from app.core.cache import get_redis
-from app.core.database import get_supabase
-from app.ml.anomaly import detect_anomalies
-from app.models.anomaly import AnomalyRecord
-from app.models.common import ApiResponse
+from services.api.app.core.cache import get_redis
+from services.api.app.core.database import get_supabase
+from services.api.app.ml.anomaly import detect_anomalies
+from services.api.app.models.anomaly import AnomalyRecord
+from services.api.app.models.common import ApiResponse
 
 router = APIRouter(prefix="/anomaly", tags=["anomaly"])
 

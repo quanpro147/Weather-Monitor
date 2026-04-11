@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Weather Monitor** — a Vietnamese weather monitoring web platform that collects, analyzes, and visualizes weather and air quality data across Vietnam. It integrates anomaly detection and LLM-generated summaries.
 
-Data source: **Open-Meteo Archive API** (weather — free, no API key required). AQI data not yet integrated.
+Data source: **Open-Meteo Archive API** (weather — free, no API key required).
 
 ## Repository Structure
 

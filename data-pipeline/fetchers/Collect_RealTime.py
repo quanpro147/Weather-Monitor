@@ -10,12 +10,12 @@ from dotenv import load_dotenv
 # Nạp các biến môi trường từ file .env (nếu có lúc chạy ở ngoài Docker)
 load_dotenv()
 
-# Setup DB connection
-DB_USER = os.getenv("DB_USER", "postgres")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "Intelligent_Data_Analysis")
+# Setup DB connection — all required, no defaults for credentials
+DB_USER = os.environ["DB_USER"]
+DB_PASSWORD = os.environ["DB_PASSWORD"]
 DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_PORT = os.getenv("DB_PORT", "5432")
-DB_NAME = os.getenv("DB_NAME", "weather")
+DB_NAME = os.environ["DB_NAME"]
 
 def get_db_connection():
     return psycopg2.connect(
@@ -147,10 +147,11 @@ def main():
                     def get_val(key, idx):
                         arr = daily.get(key, [])
                         return arr[idx] if idx < len(arr) else None
+                    wc = get_val('weather_code', i)
                     record = (
-                        city_id, 
+                        city_id,
                         dates[i],
-                        c(get_val('weather_code', i)), 
+                        int(wc) if wc is not None else None,
                         c(get_val('temperature_2m_max', i)), 
                         c(get_val('temperature_2m_min', i)), 
                         c(get_val('temperature_2m_mean', i)), 

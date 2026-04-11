@@ -1,31 +1,51 @@
 services:
-  db:
-    image: postgres:15-alpine
-    container_name: weather-monitor-db
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: Intelligent_Data_Analysis
-      POSTGRES_DB: weather
+  # db service tạm comment — DB đã deploy trên Supabase cloud
+  # db:
+  #   image: postgres:15-alpine
+  #   container_name: weather-monitor-db
+  #   environment:
+  #     POSTGRES_USER: ${DB_USER}
+  #     POSTGRES_PASSWORD: ${DB_PASSWORD}
+  #     POSTGRES_DB: ${DB_NAME}
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - pgdata:/var/lib/postgresql/data
+  #     - ./infra/supabase/schema.sql:/docker-entrypoint-initdb.d/init.sql
+
+  redis:
+    image: redis:7-alpine
+    container_name: weather-monitor-redis
+    command: redis-server /usr/local/etc/redis/redis.conf
     ports:
-      - "5432:5432"
+      - "${REDIS_PORT:-6379}:6379"
     volumes:
-      - pgdata:/var/lib/postgresql/data
-      - ./infra/supabase/schema.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./infra/redis/redis.conf:/usr/local/etc/redis/redis.conf
+      - redisdata:/data
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: infra/docker/api.Dockerfile
+    container_name: weather-monitor-api
+    env_file: .env
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    depends_on:
+      - redis
+    restart: unless-stopped
 
   pipeline:
     build:
       context: .
       dockerfile: data-pipeline/Dockerfile
     container_name: weather-data-pipeline
+    env_file: .env
     environment:
-      - DB_USER=postgres.lzkbkkhhuyvefjqemdtk
-      - DB_PASSWORD=Trunghieu06012005
-      - DB_HOST=aws-1-ap-northeast-2.pooler.supabase.com
-      - DB_PORT=6543
-      - DB_NAME=postgres
       - PYTHONUNBUFFERED=1
     restart: unless-stopped
 
 volumes:
   pgdata:
-
+  redisdata:

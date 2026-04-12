@@ -1,18 +1,19 @@
-import { Link, useRouter } from "next/router"; // Đổi sang router của Next.js
+import Link from "next/link";
+import { useRouter } from "next/router";
 import { useState } from "react";
 
 export default function Sidebar() {
     const router = useRouter();
     const [showAvatarDropdown, setShowAvatarDropdown] = useState(false);
 
-    // Menu cho Weather Admin
+    // Đã cập nhật path: Overview Dashboard trỏ về root '/'
     const menuItems = [
-        { label: 'Overview Dashboard', icon: 'fa-chart-pie', path: '/weather' },
-        { label: 'Interactive Map', icon: 'fa-map-location-dot', path: '/weather/map' },
-        { label: 'Data Analytics (EDA)', icon: 'fa-chart-line', path: '/weather/analytics' },
-        { label: 'AI Insights & Alerts', icon: 'fa-bolt', path: '/weather/insights' },
-        { label: 'Station Management', icon: 'fa-satellite-dish', path: '/weather/stations' },
-        { label: 'System Settings', icon: 'fa-gear', path: '/weather/settings' },
+        { label: 'Overview Dashboard', icon: 'fa-chart-pie', path: '/' },
+        { label: 'Interactive Map', icon: 'fa-map-location-dot', path: '/map' },
+        { label: 'Data Analytics (EDA)', icon: 'fa-chart-line', path: '/analytics' },
+        { label: 'AI Insights & Alerts', icon: 'fa-bolt', path: '/insights' },
+        { label: 'Station Management', icon: 'fa-satellite-dish', path: '/stations' },
+        { label: 'System Settings', icon: 'fa-gear', path: '/settings' },
     ];
 
     const isActive = (path: string) => router.pathname === path;

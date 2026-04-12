@@ -1,26 +1,17 @@
-// export default function HomePage() {
-// 	return <main>Weather Monitor</main>;
-// }
-
-import React from 'react';
 import Head from 'next/head';
-import Sidebar from '../components/layout/Sidebar';
+import MainLayout from '../components/layout/MainLayout';
 import DashboardOverview from '../components/features/dashboard/DashboardOverview';
 
-export default function WeatherDashboardPage() {
+export default function Home() {
     return (
-        <div className="flex h-screen bg-[#F8FAFC] font-sans overflow-hidden">
+        <>
             <Head>
-                <title>Dashboard | Weather Monitor & Analytics</title>
+                <title>Command Center | Weather Monitor</title>
             </Head>
 
-            {/* Sidebar cố định bên trái */}
-            <Sidebar />
-
-            {/* Khu vực nội dung chính có thể scroll */}
-            <div className="flex-1 overflow-y-auto">
+            <MainLayout>
                 <DashboardOverview />
-            </div>
-        </div>
+            </MainLayout>
+        </>
     );
 }

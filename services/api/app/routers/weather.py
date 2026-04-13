@@ -11,9 +11,11 @@ from services.api.app.models.weather import (
     AdvisoryResponse,
     CityWeatherCompare,
     ExtremeResult,
+    WeatherCurrentResponse,
     WeatherDaily,
     WeatherStats,
 )
+from services.api.app.services.weather_provider import fetch_current_enrichment
 
 router = APIRouter(prefix="/weather", tags=["weather"])
 
@@ -152,7 +154,7 @@ def weather_extremes(
 
 # ── Per-city endpoints ────────────────────────────────────────────────────────
 
-@router.get("/{city_id}/current", response_model=ApiResponse[WeatherDaily])
+@router.get("/{city_id}/current", response_model=ApiResponse[WeatherCurrentResponse])
 def get_current_weather(city_id: int):
     """Get the most recent weather record for a city."""
     cache_key = f"weather:{city_id}:current"
@@ -174,7 +176,35 @@ def get_current_weather(city_id: int):
     if not resp.data:
         raise HTTPException(status_code=404, detail=f"No weather data for city {city_id}")
 
-    record = WeatherDaily(**resp.data[0])
+    latest_row = resp.data[0]
+
+    city_resp = (
+        db.table("cities")
+        .select("latitude, longitude")
+        .eq("city_id", city_id)
+        .limit(1)
+        .execute()
+    )
+    if not city_resp.data:
+        raise HTTPException(status_code=404, detail=f"City {city_id} not found")
+
+    city_row = city_resp.data[0]
+    enrichment = fetch_current_enrichment(float(city_row["latitude"]), float(city_row["longitude"]))
+
+    precipitation = enrichment.get("precipitation")
+    if precipitation is None:
+        precipitation = latest_row.get("rain_sum")
+
+    payload = {
+        **latest_row,
+        "air_quality_index": enrichment.get("air_quality_index"),
+        "pressure": enrichment.get("pressure"),
+        "visibility": enrichment.get("visibility"),
+        "precipitation": precipitation,
+        "aqi": enrichment.get("air_quality_index"),
+    }
+
+    record = WeatherCurrentResponse(**payload)
     cache.setex(cache_key, CACHE_TTL, record.model_dump_json())
     return ApiResponse(success=True, data=record)
 
@@ -340,7 +370,7 @@ def get_advisory(city_id: int):
 
 # ── Legacy endpoints (backward compatibility) ─────────────────────────────────
 
-@router.get("/{city_id}/latest", response_model=ApiResponse[WeatherDaily])
+@router.get("/{city_id}/latest", response_model=ApiResponse[WeatherCurrentResponse])
 def get_latest_weather(city_id: int):
     """Alias for /current — kept for backward compatibility."""
     return get_current_weather(city_id)

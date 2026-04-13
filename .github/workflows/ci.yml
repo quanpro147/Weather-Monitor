@@ -1,0 +1,33 @@
+name: CI Workflow
+
+# Kịch bản này sẽ tự động chạy khi bạn push code lên nhánh main
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build-and-test:
+    name: Build and Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build project
+        run: npm run build
+
+      # (Tùy chọn) Nếu dự án của bạn có cấu hình kiểm tra lỗi code (eslint), hãy bỏ dấu # ở 2 dòng dưới
+      # - name: Run Linter
+      #   run: npm run lint

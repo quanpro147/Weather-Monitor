@@ -251,7 +251,7 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
     return (
         <div className="mx-auto w-full max-w-[1500px] flex flex-col gap-4 animate-in fade-in duration-700">
             {/* Global Status Bar */}
-            <div className="rounded-xl border border-[#2a2a2a] bg-[#151515] px-4 py-2 text-xs font-semibold text-[#d1d5db]">
+            <div className="rounded-xl border border-gray-200 dark:border-[#2a2a2a] bg-white dark:bg-[#151515] px-4 py-2 text-xs font-semibold text-gray-700 dark:text-[#d1d5db] shadow-sm">
                 {backendDataState}
             </div>
             

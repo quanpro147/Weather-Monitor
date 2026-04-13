@@ -90,23 +90,26 @@ export default function InteractiveMap({ isDark = true, data, isLoading = false,
                         }}
                     >
                         <Popup className={isDark ? 'custom-popup-dark' : 'custom-popup-light'}>
-                            <div className="p-1 min-w-[120px]">
-                                <p className="font-black text-sm uppercase mb-2 border-b border-gray-200 dark:border-gray-700 pb-1 text-gray-900 dark:text-white">
+                            <div className="p-1 min-w-[140px]">
+                                <p className={`font-black text-sm uppercase mb-2 border-b pb-1 ${isDark ? 'border-[#2a2d33] text-white' : 'border-gray-200 text-gray-900'}`}>
                                     {point.city}
                                 </p>
-                                <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px]">
-                                    <div className="font-bold text-orange-500">
-                                        Temp: <span className="font-black text-gray-800 dark:text-gray-200">{formatMetric(point.temp, '°C')}</span>
+                                <div className="flex flex-col gap-1.5 text-[11px] whitespace-nowrap">
+                                    <div className="flex justify-between items-center gap-3">
+                                        <span className="font-bold text-orange-500">Temp:</span>
+                                        <span className={`font-black ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>{formatMetric(point.temp, '°C')}</span>
                                     </div>
-                                    <div className={`font-bold ${point.aqi === null || point.aqi === undefined ? 'text-slate-500' : point.aqi > 100 ? 'text-red-500' : 'text-emerald-500'}`}>
-                                        AQI: <span className="font-black text-gray-800 dark:text-gray-200">{point.aqi ?? 'N/A'}</span>
+                                    <div className="flex justify-between items-center gap-3">
+                                        <span className={`font-bold ${point.aqi === null || point.aqi === undefined ? 'text-slate-500' : point.aqi > 100 ? 'text-red-500' : 'text-emerald-500'}`}>AQI:</span>
+                                        <span className={`font-black ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>{point.aqi ?? 'N/A'}</span>
                                     </div>
-                                    <div className="font-bold text-blue-500 col-span-2">
-                                        Rain: <span className="font-black text-gray-800 dark:text-gray-200">{formatMetric(point.rain, ' mm')}</span>
+                                    <div className="flex justify-between items-center gap-3">
+                                        <span className="font-bold text-blue-500">Rain:</span>
+                                        <span className={`font-black ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>{formatMetric(point.rain, ' mm')}</span>
                                     </div>
                                     {(point.aqi === null || point.aqi === undefined) && (
-                                        <div className="col-span-2 text-[10px] font-semibold text-slate-500">
-                                            Sensor Offline / Du lieu khong kha dung
+                                        <div className={`mt-1 whitespace-normal text-[9px] font-semibold text-center p-1.5 rounded border ${isDark ? 'text-slate-400 bg-slate-800/50 border-slate-700' : 'text-slate-500 bg-slate-100 border-slate-200'}`}>
+                                            Sensor Offline / No Data
                                         </div>
                                     )}
                                 </div>

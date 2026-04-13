@@ -4,6 +4,10 @@
 
 /* Bạn có thể viết thêm CSS custom của riêng bạn ở dưới này */
 /* Leaflet Dark Mode Popup Customization */
+.custom-popup-dark, .custom-popup-light {
+  font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+}
+
 .custom-popup-dark .leaflet-popup-content-wrapper {
   background-color: #1a1d21;
   color: #f3f4f6;
@@ -19,4 +23,22 @@
 .custom-popup-dark .leaflet-popup-content p {
     margin: 0;
     border-color: #2a2d33;
+}
+
+/* Leaflet Light Mode Popup Customization */
+.custom-popup-light .leaflet-popup-content-wrapper {
+  background-color: #ffffff;
+  color: #111827;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+.custom-popup-light .leaflet-popup-tip {
+  background-color: #ffffff;
+  border-bottom: 1px solid #e5e7eb;
+  border-right: 1px solid #e5e7eb;
+}
+.custom-popup-light .leaflet-popup-content p {
+    margin: 0;
+    border-color: #e5e7eb;
 }

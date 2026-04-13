@@ -3,3 +3,20 @@
 @tailwind utilities;
 
 /* Bạn có thể viết thêm CSS custom của riêng bạn ở dưới này */
+/* Leaflet Dark Mode Popup Customization */
+.custom-popup-dark .leaflet-popup-content-wrapper {
+  background-color: #1a1d21;
+  color: #f3f4f6;
+  border: 1px solid #2a2d33;
+  border-radius: 12px;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+}
+.custom-popup-dark .leaflet-popup-tip {
+  background-color: #1a1d21;
+  border-bottom: 1px solid #2a2d33;
+  border-right: 1px solid #2a2d33;
+}
+.custom-popup-dark .leaflet-popup-content p {
+    margin: 0;
+    border-color: #2a2d33;
+}

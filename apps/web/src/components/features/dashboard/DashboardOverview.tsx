@@ -10,22 +10,27 @@ import {
     XAxis,
     YAxis,
 } from 'recharts';
+import dynamic from 'next/dynamic';
 import KpiGrid from '../kpi-matrix/KpiGrid';
+import type { MapDataPoint } from '../../features/geospatial-map/InteractiveMap';
 import { useAnomalyData } from '../../../hooks/useAnomalyData';
 import { useGlobalFilter } from '../../../hooks/useGlobalFilter';
 import { useWeatherData } from '../../../hooks/useWeatherData';
-import { getWeatherAdvisory } from '../../../services/weather.service';
+import { listCities } from '../../../services/city.service';
+import { getCurrentWeather, getWeatherAdvisory } from '../../../services/weather.service';
 import type { AdvisoryResponse, WeatherDaily } from '../../../types/weather';
 
-import dynamic from 'next/dynamic';
-
-// 1. Định nghĩa kiểu dữ liệu cho Props của Map
+// Định nghĩa kiểu dữ liệu cho Props của Map để tránh lỗi TypeScript
 interface InteractiveMapProps {
     isDark?: boolean;
+    data: MapDataPoint[];
+    isLoading?: boolean;
+    error?: string | null;
 }
 
+// Bắt buộc dùng Dynamic Import tắt SSR cho Leaflet Map
 const InteractiveMap = dynamic<InteractiveMapProps>(
-    () => import('../geospatial-map/InteractiveMap'),
+    () => import('../../features/geospatial-map/InteractiveMap'),
     { 
         ssr: false, 
         loading: () => <div className="h-full w-full animate-pulse bg-gray-100 dark:bg-[#151515] rounded-xl" /> 
@@ -40,12 +45,15 @@ type AlertTab = 'live' | 'summary';
 
 type WeatherWithOptionalRealtime = WeatherDaily & {
     aqi?: number | null;
+    air_quality_index?: number | null;
     pressure?: number | null;
     visibility?: number | null;
     temperature?: number | null;
     wind_speed?: number | null;
+    precipitation?: number | null;
 };
 
+// Hàm định dạng số liệu, trả về '--' nếu missing data
 function formatNumber(value: number | null | undefined, digits = 1): string {
     if (value === null || value === undefined || Number.isNaN(value)) {
         return '--';
@@ -70,23 +78,7 @@ function resolveTempDelta(current: WeatherDaily | null, history: WeatherDaily[])
     return `${sign}${diff.toFixed(1)}°C vs previous day`;
 }
 
-const liveAlerts = [
-    {
-        level: 'Critical',
-        title: 'High Flood Risk - Thu Duc Sector',
-        reason: 'Rainfall accumulation reached 172mm/6h and soil moisture saturation is 98%.',
-        icon: 'fa-house-flood-water',
-        color: 'border-red-200 dark:border-red-500/45 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400',
-    },
-    {
-        level: 'Warning',
-        title: 'Abnormal Pressure Drop - District 7',
-        reason: 'Surface pressure dropped 7.8hPa within 2 hours with wind gusts at 46km/h.',
-        icon: 'fa-gauge-high',
-        color: 'border-orange-200 dark:border-orange-500/45 bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400',
-    },
-];
-
+// Mock Data cho hệ thống AI Insights
 const aiSummaries = [
     {
         title: '72-Hour Heat Stress Trend',
@@ -103,9 +95,15 @@ const aiSummaries = [
 export default function DashboardOverview({ isDark = true }: DashboardOverviewProps) {
     const [activeAlertTab, setActiveAlertTab] = useState<AlertTab>('live');
     const [chartReady, setChartReady] = useState(false);
+    
+    // API Hooks
     const [advisory, setAdvisory] = useState<AdvisoryResponse | null>(null);
     const [advisoryLoading, setAdvisoryLoading] = useState(false);
     const [advisoryError, setAdvisoryError] = useState<string | null>(null);
+    const [mapData, setMapData] = useState<MapDataPoint[]>([]);
+    const [mapLoading, setMapLoading] = useState(false);
+    const [mapError, setMapError] = useState<string | null>(null);
+    
     const { cityId, startDate, endDate } = useGlobalFilter();
     const {
         current,
@@ -118,6 +116,7 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
         isLoading: anomalyLoading,
     } = useAnomalyData({ cityId, startDate, endDate, enabled: cityId !== null });
 
+    // Đảm bảo chart chỉ render trên client
     useEffect(() => {
         setChartReady(true);
     }, []);
@@ -125,6 +124,73 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
     useEffect(() => {
         let active = true;
 
+        const loadMapData = async () => {
+            setMapLoading(true);
+            setMapError(null);
+
+            try {
+                const cities = await listCities();
+                const citySlice = cities.slice(0, 25);
+
+                const currentResults = await Promise.allSettled(
+                    citySlice.map(async (city) => {
+                        const currentWeather = (await getCurrentWeather(city.city_id)) as WeatherWithOptionalRealtime;
+                        return { city, currentWeather };
+                    }),
+                );
+
+                if (!active) {
+                    return;
+                }
+
+                const nextMapData: MapDataPoint[] = currentResults.flatMap((result) => {
+                    if (result.status !== 'fulfilled') {
+                        return [];
+                    }
+
+                    const payload = result.value;
+                    return [
+                        {
+                            id: payload.city.city_id,
+                            city: payload.city.city,
+                            lat: payload.city.latitude,
+                            lng: payload.city.longitude,
+                            // Missing metrics MUST remain null and never be forced to 0.
+                            temp: payload.currentWeather.temperature_2m_max ?? payload.currentWeather.temperature_2m_mean ?? null,
+                            aqi: payload.currentWeather.air_quality_index ?? payload.currentWeather.aqi ?? null,
+                            rain: payload.currentWeather.precipitation ?? payload.currentWeather.rain_sum ?? null,
+                        },
+                    ];
+                });
+
+                setMapData(nextMapData);
+
+                if (nextMapData.length === 0) {
+                    setMapError('No valid station payload returned from backend.');
+                }
+            } catch (err) {
+                if (!active) {
+                    return;
+                }
+                setMapData([]);
+                setMapError(err instanceof Error ? err.message : 'Failed to load geospatial map data');
+            } finally {
+                if (active) {
+                    setMapLoading(false);
+                }
+            }
+        };
+
+        void loadMapData();
+
+        return () => {
+            active = false;
+        };
+    }, [cityId]);
+
+    // Fetch Advisory Data
+    useEffect(() => {
+        let active = true;
         const loadAdvisory = async () => {
             if (cityId === null) {
                 setAdvisory(null);
@@ -137,37 +203,30 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
 
             try {
                 const nextAdvisory = await getWeatherAdvisory(cityId);
-                if (!active) {
-                    return;
-                }
+                if (!active) return;
                 setAdvisory(nextAdvisory);
             } catch (err) {
-                if (!active) {
-                    return;
-                }
+                if (!active) return;
                 setAdvisory(null);
                 setAdvisoryError(err instanceof Error ? err.message : 'Failed to load advisory data');
             } finally {
-                if (active) {
-                    setAdvisoryLoading(false);
-                }
+                if (active) setAdvisoryLoading(false);
             }
         };
 
         void loadAdvisory();
-
-        return () => {
-            active = false;
-        };
+        return () => { active = false; };
     }, [cityId]);
 
+    // Data Mapping
     const realtime = (current ?? null) as WeatherWithOptionalRealtime | null;
     const mainTemp = realtime?.temperature ?? current?.temperature_2m_max ?? current?.temperature_2m_mean;
     const windSpeed = realtime?.wind_speed ?? current?.wind_speed_10m_max;
     const pressure = realtime?.pressure ?? null;
     const visibility = realtime?.visibility ?? null;
-    const aqi = realtime?.aqi ?? null;
+    const aqi = realtime?.air_quality_index ?? realtime?.aqi ?? null;
 
+    // Chuẩn bị dữ liệu cho Chart: Giữ nguyên giá trị null nếu AQI không có dữ liệu
     const trendData = history.slice(-12).map((item) => {
         const itemRealtime = item as WeatherWithOptionalRealtime;
         const tempActual = itemRealtime.temperature ?? item.temperature_2m_max ?? item.temperature_2m_mean ?? 0;
@@ -176,7 +235,7 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
             tempActual,
             tempForecast: item.temperature_2m_mean ?? tempActual,
             rainfall: item.rain_sum ?? 0,
-            aqi: itemRealtime.aqi ?? 0,
+            aqi: itemRealtime.aqi ?? null, // FIXED: Trả về null thay vì 0 để tránh sai lệch biểu đồ
         };
     });
 
@@ -191,6 +250,7 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
 
     return (
         <div className="mx-auto w-full max-w-[1500px] flex flex-col gap-4 animate-in fade-in duration-700">
+            {/* Global Status Bar */}
             <div className="rounded-xl border border-[#2a2a2a] bg-[#151515] px-4 py-2 text-xs font-semibold text-[#d1d5db]">
                 {backendDataState}
             </div>
@@ -202,7 +262,9 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
                     <div className="flex items-start justify-between">
                         <div>
                             <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400 dark:text-[#6b7280] mb-1">Main Weather</p>
-                            <h3 className="text-6xl font-black tracking-tighter text-gray-900 dark:text-[#f3f4f6] leading-none">{formatNumber(mainTemp)}°C</h3>
+                            <h3 className="text-6xl font-black tracking-tighter text-gray-900 dark:text-[#f3f4f6] leading-none">
+                                {formatNumber(mainTemp)}°C
+                            </h3>
                             <p className="mt-2 text-xs font-medium text-gray-500 dark:text-[#9ca3af]">{mainCondition}</p>
                         </div>
                         <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-orange-50 dark:bg-orange-500/10 border border-orange-100 dark:border-orange-500/30 text-2xl text-orange-500 dark:text-orange-400 shadow-inner">
@@ -224,7 +286,7 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
                     </div>
                 </article>
 
-                {/* KPI Grid */}
+                {/* KPI Grid (External Component) */}
                 <KpiGrid
                     current={current}
                     history={history}
@@ -282,7 +344,7 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
                                     ? `${anomalyCount} anomaly records in selected range ${startDate} -> ${endDate}.`
                                     : `No anomalies detected in selected range ${startDate} -> ${endDate}.`,
                                 icon: 'fa-triangle-exclamation',
-                                color: 'border-red-200 dark:border-red-500/45 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400',
+                                color: anomalyCount > 0 ? 'border-red-200 dark:border-red-500/45 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400' : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/30 text-gray-500 dark:text-gray-400',
                             },
                         ].map((alert) => (
                             <article key={alert.title} className={`rounded-xl border p-4 transition-all hover:scale-[1.01] ${alert.color}`}>
@@ -328,9 +390,8 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
                         <h3 className="text-xs font-black text-gray-900 dark:text-[#f3f4f6] uppercase tracking-wider">Geospatial Map</h3>
                         <span className="text-[9px] font-bold text-gray-400 uppercase">Vietnam Region</span>
                     </div>
-                    {/* Bản đồ được nhúng vào đây */}
-                    <div className="relative flex-1 min-h-[300px] flex items-center justify-center">
-                        <InteractiveMap isDark={isDark} />
+                    <div className="relative flex-1 min-h-[300px] overflow-hidden rounded-xl border border-gray-100 dark:border-[#2a2a2a] bg-gray-50 dark:bg-[#151515] flex items-center justify-center">
+                        <InteractiveMap isDark={isDark} data={mapData} isLoading={mapLoading} error={mapError} />
                     </div>
                 </article>
 
@@ -344,7 +405,7 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
                     <div className="flex-1 min-h-[300px] w-full min-w-0">
                         {chartReady ? (
                         <ResponsiveContainer width="100%" height="100%">
-                            <ComposedChart data={trendData.length > 0 ? trendData : [{ time: '--', tempActual: 0, tempForecast: 0, rainfall: 0, aqi: 0 }]} margin={{ top: 5, right: -10, left: -25, bottom: 0 }}>
+                            <ComposedChart data={trendData.length > 0 ? trendData : [{ time: '--', tempActual: 0, tempForecast: 0, rainfall: 0, aqi: null }]} margin={{ top: 5, right: -10, left: -25, bottom: 0 }}>
                                 <defs>
                                     <linearGradient id="rainFill" x1="0" y1="0" x2="0" y2="1">
                                         <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.3} />
@@ -370,7 +431,9 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
                                 <Area yAxisId="right" type="monotone" dataKey="rainfall" name="Rain (mm)" stroke="#0ea5e9" fill="url(#rainFill)" strokeWidth={2} />
                                 <Line yAxisId="left" type="monotone" dataKey="tempActual" name="Temp Actual" stroke="#f97316" strokeWidth={3} dot={{ r: 3, fill: '#f97316' }} />
                                 <Line yAxisId="left" type="monotone" dataKey="tempForecast" name="Temp Forecast" stroke="#fdba74" strokeDasharray="4 4" strokeWidth={2} dot={false} opacity={0.6} />
-                                <Line yAxisId="right" type="monotone" dataKey="aqi" name="AQI" stroke="#ef4444" strokeWidth={2} dot={{ r: 2 }} />
+                                
+                                {/* Missing AQI remains null; connectNulls=false to show signal break explicitly. */}
+                                <Line yAxisId="right" type="monotone" dataKey="aqi" name="AQI" stroke="#ef4444" strokeWidth={2} dot={{ r: 2 }} connectNulls={false} />
                             </ComposedChart>
                         </ResponsiveContainer>
                         ) : (

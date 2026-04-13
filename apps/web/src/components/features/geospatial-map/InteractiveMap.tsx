@@ -3,23 +3,26 @@ import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from 'react-leaf
 import 'leaflet/dist/leaflet.css';
 import MapLegend from './MapLegend';
 
-// Khai báo Props ở đây
-interface MapProps {
-    isDark?: boolean;
-}
-
-interface MapDataPoint {
+export interface MapDataPoint {
     id: number;
     city: string;
     lat: number;
     lng: number;
-    temp: number;
-    aqi: number;
-    rain: number;
+    temp: number | null;
+    aqi: number | null;
+    rain: number | null;
 }
 
-// Hàm xác định màu dựa trên AQI
-const getAqiColor = (aqi: number) => {
+interface InteractiveMapProps {
+    isDark?: boolean;
+    data: MapDataPoint[];
+    isLoading?: boolean;
+    error?: string | null;
+}
+
+// Missing data MUST use gray marker to avoid false-negative interpretation.
+const getAqiColor = (aqi: number | null | undefined) => {
+    if (aqi === null || aqi === undefined) return '#64748b'; // slate gray = no data/offline
     if (aqi <= 50) return '#10b981'; // Green
     if (aqi <= 100) return '#fbbf24'; // Yellow
     if (aqi <= 150) return '#f97316'; // Orange
@@ -27,37 +30,37 @@ const getAqiColor = (aqi: number) => {
     return '#a855f7'; // Purple
 };
 
+function formatMetric(value: number | null | undefined, suffix: string): string {
+    if (value === null || value === undefined || Number.isNaN(value)) {
+        return 'N/A';
+    }
+    return `${value}${suffix}`;
+}
+
 // Component điều chỉnh lại kích thước bản đồ khi container cha thay đổi
 function MapResizer() {
     const map = useMap();
     useEffect(() => {
-        setTimeout(() => { map.invalidateSize(); }, 200);
+        const timeout = setTimeout(() => { map.invalidateSize(); }, 200);
+        return () => clearTimeout(timeout);
     }, [map]);
     return null;
 }
 
-export default function InteractiveMap({ isDark = true }: { isDark?: boolean }) {
-    // MOCK DATA: Tọa độ một số thành phố tại VN (Bạn sẽ thay bằng data fetch từ API)
-    const mapData: MapDataPoint[] = [
-        { id: 1, city: 'Ho Chi Minh City', lat: 10.8231, lng: 106.6297, temp: 34, aqi: 142, rain: 12 },
-        { id: 2, city: 'Ha Noi', lat: 21.0285, lng: 105.8542, temp: 28, aqi: 185, rain: 0 },
-        { id: 3, city: 'Da Nang', lat: 16.0471, lng: 108.2062, temp: 31, aqi: 45, rain: 5 },
-        { id: 4, city: 'Can Tho', lat: 10.0452, lng: 105.7469, temp: 33, aqi: 65, rain: 18 },
-    ];
-
+export default function InteractiveMap({ isDark = true, data, isLoading = false, error = null }: InteractiveMapProps) {
     // Định tuyến Map Tiles (Sáng/Tối)
     const tileUrl = isDark 
-        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png' // Carto Dark
-        : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'; // Carto Light
+        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png' 
+        : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'; 
 
     return (
-        <div className="relative w-full h-full z-10 rounded-xl overflow-hidden border border-gray-200 dark:border-[#2a2a2a]">
+        <div className="relative w-full h-full z-10 rounded-xl overflow-hidden border border-gray-200 dark:border-[#2a2a2a] bg-gray-100 dark:bg-[#151515]">
             <MapContainer 
-                center={[16.0471, 106.0]} // Tọa độ trung tâm VN
-                zoom={5.5} 
+                center={[16.4, 106.5]} // Căn giữa lại bản đồ để nhìn bao quát toàn bộ VN (từ Hà Nội đến Cà Mau)
+                zoom={5.2} 
                 scrollWheelZoom={true}
                 className="w-full h-full"
-                zoomControl={false} // Tắt nút zoom mặc định cho UI gọn gàng
+                zoomControl={false}
             >
                 <MapResizer />
                 
@@ -66,32 +69,70 @@ export default function InteractiveMap({ isDark = true }: { isDark?: boolean }) 
                     attribution='&copy; <a href="https://carto.com/">CARTO</a>'
                 />
 
-                {mapData.map((point) => (
+                {data.map((point) => (
                     <CircleMarker
                         key={point.id}
                         center={[point.lat, point.lng]}
-                        radius={14} // Kích thước đủ lớn để Touch-Optimized
+                        radius={point.aqi === null || point.aqi === undefined ? 8 : 10}
                         pathOptions={{ 
                             fillColor: getAqiColor(point.aqi), 
-                            color: isDark ? '#1e1e1e' : '#ffffff', 
-                            weight: 2, 
-                            fillOpacity: 0.8 
+                            color: '#f8fafc',
+                            weight: 2,
+                            fillOpacity: point.aqi === null || point.aqi === undefined ? 0.65 : 0.9,
+                        }}
+                        eventHandlers={{
+                            mouseover: (e) => {
+                                e.target.openPopup();
+                            },
+                            mouseout: (e) => {
+                                e.target.closePopup();
+                            },
                         }}
                     >
-                        {/* Popup Modal (Progressive Disclosure) */}
                         <Popup className={isDark ? 'custom-popup-dark' : 'custom-popup-light'}>
-                            <div className="p-1">
-                                <p className="font-black text-sm uppercase mb-2 border-b pb-1">{point.city}</p>
-                                <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
-                                    <div className="font-bold text-orange-500">Temp: <span className="font-black">{point.temp}°C</span></div>
-                                    <div className="font-bold text-red-500">AQI: <span className="font-black">{point.aqi}</span></div>
-                                    <div className="font-bold text-blue-500">Rain: <span className="font-black">{point.rain} mm</span></div>
+                            <div className="p-1 min-w-[120px]">
+                                <p className="font-black text-sm uppercase mb-2 border-b border-gray-200 dark:border-gray-700 pb-1 text-gray-900 dark:text-white">
+                                    {point.city}
+                                </p>
+                                <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px]">
+                                    <div className="font-bold text-orange-500">
+                                        Temp: <span className="font-black text-gray-800 dark:text-gray-200">{formatMetric(point.temp, '°C')}</span>
+                                    </div>
+                                    <div className={`font-bold ${point.aqi === null || point.aqi === undefined ? 'text-slate-500' : point.aqi > 100 ? 'text-red-500' : 'text-emerald-500'}`}>
+                                        AQI: <span className="font-black text-gray-800 dark:text-gray-200">{point.aqi ?? 'N/A'}</span>
+                                    </div>
+                                    <div className="font-bold text-blue-500 col-span-2">
+                                        Rain: <span className="font-black text-gray-800 dark:text-gray-200">{formatMetric(point.rain, ' mm')}</span>
+                                    </div>
+                                    {(point.aqi === null || point.aqi === undefined) && (
+                                        <div className="col-span-2 text-[10px] font-semibold text-slate-500">
+                                            Sensor Offline / Du lieu khong kha dung
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </Popup>
                     </CircleMarker>
                 ))}
             </MapContainer>
+
+            {isLoading && (
+                <div className="absolute inset-0 z-[500] grid place-items-center bg-black/30 text-xs font-bold uppercase tracking-widest text-white">
+                    Loading map data...
+                </div>
+            )}
+
+            {!isLoading && !!error && (
+                <div className="absolute left-4 top-4 z-[500] rounded-lg border border-red-300 bg-red-50/95 px-3 py-2 text-xs font-semibold text-red-700 shadow-md">
+                    Map data error: {error}
+                </div>
+            )}
+
+            {!isLoading && !error && data.length === 0 && (
+                <div className="absolute left-4 top-4 z-[500] rounded-lg border border-slate-300 bg-slate-50/95 px-3 py-2 text-xs font-semibold text-slate-700 shadow-md">
+                    No stations available for map rendering.
+                </div>
+            )}
 
             <MapLegend isDark={isDark} />
         </div>

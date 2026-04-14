@@ -12,6 +12,11 @@ jobs:
     name: Build and Check
     runs-on: ubuntu-latest
 
+    # THÊM MỚI: Chỉ định thư mục làm việc mặc định cho tất cả các lệnh "run"
+    defaults:
+      run:
+        working-directory: ./apps/web
+
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
@@ -21,6 +26,8 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
+          # THÊM MỚI: Trỏ đường dẫn chính xác tới vị trí file lock
+          cache-dependency-path: './apps/web/package-lock.json'
 
       - name: Install dependencies
         run: npm install

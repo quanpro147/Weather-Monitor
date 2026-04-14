@@ -254,7 +254,7 @@ export default function FullMapView() {
                     ].map((layer) => (
                         <button
                             key={layer.id}
-                            onClick={() => setActiveLayer(layer.id)}
+                            onClick={() => setActiveLayer(layer.id as LayerId)}
                             className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all ${
                                 activeLayer === layer.id 
                                 ? 'bg-cyan-500 text-white shadow-md' 

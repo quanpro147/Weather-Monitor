@@ -1,14 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useGlobalFilter, type DateRangePreset } from '../../hooks/useGlobalFilter';
+import { useTheme } from '../../contexts/ThemeContext';
 import { listCities } from '../../services/city.service';
 import type { City } from '../../types/city';
 
-interface TopbarProps {
-    isDark: boolean;
-    toggleTheme: () => void;
-}
-
-export default function Topbar({ isDark, toggleTheme }: TopbarProps) {
+export default function Topbar() {
+    const { isDark, toggleTheme } = useTheme();
     const { cityId, setCityId, dateRangePreset, setDateRangePreset } = useGlobalFilter();
     const [cities, setCities] = useState<City[]>([]);
     const [loadingCities, setLoadingCities] = useState(false);

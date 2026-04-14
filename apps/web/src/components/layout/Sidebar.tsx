@@ -6,7 +6,7 @@ export default function Sidebar() {
 
     const menuItems = [
         { label: 'Overview Dashboard', icon: 'fa-chart-pie', path: '/', enabled: true },
-        { label: 'Interactive Map', icon: 'fa-map-location-dot', path: '/map', enabled: false },
+        { label: 'Interactive Map', icon: 'fa-map-location-dot', path: '/map', enabled: true },
         { label: 'Data Analytics (EDA)', icon: 'fa-chart-line', path: '/analytics', enabled: false },
         { label: 'AI Insights & Alerts', icon: 'fa-bolt', path: '/insights', enabled: false },
         { label: 'Station Management', icon: 'fa-satellite-dish', path: '/stations', enabled: false },

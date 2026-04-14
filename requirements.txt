@@ -1,0 +1,12 @@
+joblib==1.5.3
+numpy==2.4.4
+scikit-learn==1.8.0
+scipy==1.17.1
+threadpoolctl==3.6.0
+
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+redis==5.0.8
+supabase==2.6.0
+python-dotenv==1.0.1
+pandas==2.2.2

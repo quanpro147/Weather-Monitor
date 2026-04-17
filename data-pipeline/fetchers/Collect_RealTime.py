@@ -44,13 +44,12 @@ def main():
     print(f"[{datetime.datetime.now()}] Starting data collection...")
     
     # Đọc file VietNam.csv
-    csv_path = os.path.join(os.path.dirname(__file__), 'VietNam.csv')
+    csv_path = os.path.join(os.path.dirname(__file__), 'cities_1500.csv')
     cities_df = pd.read_csv(csv_path)
 
     conn = get_db_connection()
     setup_cities(conn, cities_df)
     end_date = datetime.date.today() - datetime.timedelta(days=1)
-    
     cursor = conn.cursor()
     cursor.execute("SELECT city_id, MAX(date) FROM public.weather_daily GROUP BY city_id")
     city_latest_dates = {row[0]: row[1] for row in cursor.fetchall()}
@@ -85,7 +84,7 @@ def main():
             start_date = latest_date + datetime.timedelta(days=1)
         else:
             # Chưa từng có data -> lấy từ đầu 2020
-            start_date = datetime.date(2020, 1, 1)
+            start_date = datetime.date(2025, 1, 1)
 
         print(f"Fetching data for {row['City']} from {start_date} to {end_date}")
         url = "https://archive-api.open-meteo.com/v1/archive"
@@ -191,7 +190,7 @@ def main():
                     print(f"Chi tiết lỗi API: {response.text}")
                 break
             
-        time.sleep(3) 
+        time.sleep(0.8) 
 
     cursor.close()
     conn.close()

@@ -42,6 +42,18 @@ class WeatherDaily(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class WeatherCurrentResponse(WeatherDaily):
+    """Current weather payload enriched with realtime environmental indicators."""
+
+    air_quality_index: float | None = None
+    pressure: float | None = None               # hPa
+    visibility: float | None = None             # km
+    precipitation: float | None = None          # mm
+
+    # Backward-compatible alias for older frontend clients.
+    aqi: float | None = None
+
+
 class WeatherStats(BaseModel):
     """Aggregated statistics for a city in a given month."""
 

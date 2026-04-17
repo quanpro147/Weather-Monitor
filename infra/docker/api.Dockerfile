@@ -9,6 +9,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application source
 COPY services/api/ .
 
+
 # Run as non-root
 RUN adduser --disabled-password --gecos "" appuser
 USER appuser

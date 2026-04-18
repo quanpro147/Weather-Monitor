@@ -53,7 +53,7 @@ def compare_cities(
     cache_key = f"compare:{','.join(str(i) for i in sorted(ids))}"
     cache = get_redis()
     cached = cache.get(cache_key)
-    if cached:
+    if isinstance(cached, str):
         return ApiResponse(success=True, data=json.loads(cached))
 
     db = get_supabase()
@@ -111,7 +111,7 @@ def weather_extremes(
     cache_key = f"extremes:{type}:{start_date}:{end_date}"
     cache = get_redis()
     cached = cache.get(cache_key)
-    if cached:
+    if isinstance(cached, str):
         return ApiResponse(success=True, data=json.loads(cached))
 
     db = get_supabase()
@@ -160,7 +160,7 @@ def get_current_weather(city_id: int):
     cache_key = f"weather:{city_id}:current"
     cache = get_redis()
     cached = cache.get(cache_key)
-    if cached:
+    if isinstance(cached, str):
         return ApiResponse(success=True, data=json.loads(cached))
 
     db = get_supabase()
@@ -232,7 +232,7 @@ def get_weather_history(
     cache_key = f"weather:{city_id}:history:{start_date}:{end_date}"
     cache = get_redis()
     cached = cache.get(cache_key)
-    if cached:
+    if isinstance(cached, str):
         return ApiResponse(success=True, data=json.loads(cached))
 
     db = get_supabase()
@@ -270,7 +270,7 @@ def get_weather_stats(
     cache_key = f"stats:{city_id}:{month}"
     cache = get_redis()
     cached = cache.get(cache_key)
-    if cached:
+    if isinstance(cached, str):
         return ApiResponse(success=True, data=json.loads(cached))
 
     db = get_supabase()
@@ -310,57 +310,74 @@ def get_weather_stats(
 
 @router.get("/{city_id}/advisory", response_model=ApiResponse[AdvisoryResponse])
 def get_advisory(city_id: int):
-    """Get rule-based weather advisory for a city based on the latest data."""
+    """Get rule-based weather advisory for a city based on recent 3-day trend."""
     cache_key = f"advisory:{city_id}"
     cache = get_redis()
     cached = cache.get(cache_key)
-    if cached:
+    if isinstance(cached, str):
         return ApiResponse(success=True, data=json.loads(cached))
 
     db = get_supabase()
+    
+    # Nâng cấp 1: Lấy thêm gió giật, nhiệt độ thấp nhất và lấy 3 ngày (thay vì 1)
     resp = (
         db.table("weather_daily")
-        .select("date, temperature_2m_max, rain_sum, wind_speed_10m_max, relative_humidity_2m_mean")
+        .select("date, temperature_2m_max, temperature_2m_min, rain_sum, wind_speed_10m_max, wind_gusts_10m_max, relative_humidity_2m_mean")
         .eq("city_id", city_id)
         .order("date", desc=True)
-        .limit(1)
+        .limit(3)
         .execute()
     )
 
     if not resp.data:
         raise HTTPException(status_code=404, detail=f"No weather data for city {city_id}")
 
-    row = resp.data[0]
-    temp_max = row.get("temperature_2m_max") or 0.0
-    rain = row.get("rain_sum") or 0.0
-    wind = row.get("wind_speed_10m_max") or 0.0
-    humidity = row.get("relative_humidity_2m_mean") or 0.0
+    # Nâng cấp 2: Phân tích ngày mới nhất & Xu hướng 3 ngày
+    today = resp.data[0]
+    temp_max = today.get("temperature_2m_max") or 0.0
+    temp_min = today.get("temperature_2m_min") or 0.0
+    rain = today.get("rain_sum") or 0.0
+    wind = today.get("wind_speed_10m_max") or 0.0
+    wind_gust = today.get("wind_gusts_10m_max") or 0.0
+    humidity = today.get("relative_humidity_2m_mean") or 0.0
 
-    # Evaluate conditions from most severe to least
+    # Tính tổng lượng mưa 3 ngày qua để cảnh báo ngập úng chính xác hơn
+    total_rain_3_days = sum(r.get("rain_sum") or 0.0 for r in resp.data)
+
+    # Nâng cấp 3: Bộ rules đánh giá rủi ro (Từ nguy hiểm nhất xuống an toàn nhất)
     if temp_max >= 38:
-        advice, risk = "Nắng nóng gay gắt, hạn chế ra ngoài từ 10h–16h", "high"
-    elif rain >= 50:
-        advice, risk = "Mưa lớn, nguy cơ ngập úng — không di chuyển nếu không cần thiết", "high"
+        advice, risk = "🔴 Nắng nóng gay gắt, nguy cơ sốc nhiệt. Hạn chế ra ngoài từ 10h–16h.", "high"
+    elif rain >= 50 or total_rain_3_days >= 100:
+        advice, risk = "🔴 Mưa lớn kéo dài, nguy cơ ngập úng cao. Hạn chế di chuyển vào các vùng trũng.", "high"
+    elif wind_gust >= 60:
+        advice, risk = "🔴 Gió giật mạnh nguy hiểm. Tránh trú dưới cây to hoặc biển quảng cáo.", "high"
+    elif temp_min <= 15:
+        advice, risk = "🔵 Rét đậm, nhiệt độ xuống thấp. Cần giữ ấm cơ thể, đặc biệt cho người già và trẻ em.", "medium"
+    elif humidity >= 90 and temp_min < 22:
+        advice, risk = "🌫️ Sương mù dày đặc làm giảm tầm nhìn. Chú ý bật đèn sương mù và giảm tốc độ khi lái xe.", "medium"
     elif rain >= 20:
-        advice, risk = "Mưa vừa đến lớn — mang theo áo mưa khi ra ngoài", "medium"
+        advice, risk = "🟡 Mưa vừa đến mưa to. Đừng quên mang theo áo mưa và cẩn thận đường trơn trượt.", "medium"
     elif temp_max >= 35:
-        advice, risk = "Nắng nóng — mang theo nước và che nắng kỹ", "medium"
-    elif wind >= 60:
-        advice, risk = "Gió mạnh — cẩn thận khi di chuyển bằng xe hai bánh", "medium"
+        advice, risk = "🟡 Nắng nóng oi bức. Hãy uống đủ nước và che nắng kỹ khi ra ngoài.", "medium"
+    elif wind >= 40:
+        advice, risk = "🟡 Gió khá mạnh. Cẩn thận khi tham gia giao thông bằng xe máy.", "medium"
     elif humidity >= 85 and rain > 0:
-        advice, risk = "Thời tiết oi bức và có mưa nhỏ — theo dõi diễn biến thêm", "low"
+        advice, risk = "🟢 Thời tiết nồm ẩm và có mưa nhỏ. Có thể gây khó chịu, chú ý bảo vệ sức khỏe.", "low"
     else:
-        advice, risk = "Thời tiết thuận lợi cho các hoạt động ngoài trời", "low"
+        advice, risk = "✅ Thời tiết ôn hòa, rất thuận lợi cho các hoạt động ngoài trời.", "low"
 
     result = AdvisoryResponse(
         advice_text=advice,
         risk_level=risk,
         based_on={
-            "date": row.get("date"),
+            "date": today.get("date"),
             "temperature_2m_max": temp_max,
+            "temperature_2m_min": temp_min,
             "rain_sum": rain,
             "wind_speed_10m_max": wind,
+            "wind_gusts_10m_max": wind_gust,
             "relative_humidity_2m_mean": humidity,
+            "total_rain_3_days_trend": total_rain_3_days
         },
     )
 

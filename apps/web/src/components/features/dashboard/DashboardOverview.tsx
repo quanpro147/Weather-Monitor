@@ -20,7 +20,6 @@ import { listCities } from '../../../services/city.service';
 import { getCurrentWeatherBulk, getWeatherAdvisory } from '../../../services/weather.service';
 import type { AdvisoryResponse, WeatherDaily } from '../../../types/weather';
 
-// Định nghĩa kiểu dữ liệu cho Props của Map để tránh lỗi TypeScript
 interface InteractiveMapProps {
     isDark?: boolean;
     data: MapDataPoint[];
@@ -53,6 +52,17 @@ type WeatherWithOptionalRealtime = WeatherDaily & {
     wind_speed?: number | null;
     precipitation?: number | null;
 };
+
+interface ForecastTrend {
+    date: string;
+    predicted_temperature: number;
+}
+
+interface AnomalyRecord {
+    date: string;
+    is_anomaly: boolean;
+}
+// ------------------------------------------------
 
 // Hàm định dạng số liệu, trả về '--' nếu missing data
 function formatNumber(value: number | null | undefined, digits = 1): string {
@@ -96,6 +106,11 @@ const aiSummaries = [
 export default function DashboardOverview({ isDark = true }: DashboardOverviewProps) {
     const [activeAlertTab, setActiveAlertTab] = useState<AlertTab>('live');
     const [chartReady, setChartReady] = useState(false);
+    
+    // --- KHAI BÁO STATE CHO TÍNH NĂNG MỚI MÀ NHÁNH FEAT ĐANG THIẾU ---
+    const [forecastList, setForecastList] = useState<ForecastTrend[]>([]);
+    const [anomalyList, setAnomalyList] = useState<AnomalyRecord[]>([]);
+    // ----------------------------------------------------------------
     
     // API Hooks
     const [advisory, setAdvisory] = useState<AdvisoryResponse | null>(null);
@@ -222,6 +237,27 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
         return () => { active = false; };
     }, [cityId]);
 
+    // Fetch Forecast & Anomalies cho Biểu đồ
+    useEffect(() => {
+        if (!cityId) return;
+
+        // 1. Gọi API Forecast (7 ngày)
+        fetch(`http://localhost:8000/forecast/${cityId}?days=7`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) setForecastList(data.data.trends || []);
+            }).catch(console.error);
+
+        // 2. Gọi API Anomaly
+        if (startDate && endDate) {
+            fetch(`http://localhost:8000/anomaly/${cityId}?start_date=${startDate}&end_date=${endDate}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) setAnomalyList(data.data || []);
+                }).catch(console.error);
+        }
+    }, [cityId, startDate, endDate]);
+
     // Data Mapping
     const realtime = (current ?? null) as WeatherWithOptionalRealtime | null;
     const mainTemp = realtime?.temperature ?? current?.temperature_2m_max ?? current?.temperature_2m_mean;
@@ -230,18 +266,40 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
     const visibility = realtime?.visibility ?? null;
     const aqi = realtime?.air_quality_index ?? realtime?.aqi ?? null;
 
-    // Chuẩn bị dữ liệu cho Chart: Giữ nguyên giá trị null nếu AQI không có dữ liệu
-    const trendData = history.slice(-12).map((item) => {
+    // Chuẩn bị dữ liệu cho Chart: Hợp nhất Lịch sử + Bất thường + Dự báo
+    const historyData = history.slice(-7).map((item) => {
         const itemRealtime = item as WeatherWithOptionalRealtime;
         const tempActual = itemRealtime.temperature ?? item.temperature_2m_max ?? item.temperature_2m_mean ?? 0;
+        
+        // Kiểm tra xem ngày này có bị ML model đánh dấu bất thường không
+        const isAnomaly = anomalyList.some(a => a.date === item.date && a.is_anomaly);
+
         return {
             time: item.date?.slice(5) ?? '--',
-            tempActual,
-            tempForecast: item.temperature_2m_mean ?? tempActual,
+            tempActual: tempActual,
+            anomalyTemp: isAnomaly ? tempActual : null, // Gắn mồi để vẽ điểm đỏ
+            tempForecast: null, // Quá khứ không có đường dự báo
             rainfall: item.rain_sum ?? 0,
-            aqi: itemRealtime.aqi ?? null, // FIXED: Trả về null thay vì 0 để tránh sai lệch biểu đồ
+            aqi: itemRealtime.aqi ?? null,
         };
     });
+
+    const forecastData = forecastList.map((f) => ({
+        time: f.date.slice(5),
+        tempActual: null,
+        anomalyTemp: null,
+        tempForecast: f.predicted_temperature, // Giá trị dự báo tương lai
+        rainfall: 0,
+        aqi: null,
+    }));
+
+    // Gắn mép: Nối điểm cuối của lịch sử với điểm đầu của dự báo để đường không bị đứt quãng
+    if (historyData.length > 0 && forecastData.length > 0) {
+        historyData[historyData.length - 1].tempForecast = historyData[historyData.length - 1].tempActual;
+    }
+
+    // Gộp mảng quá khứ và tương lai lại làm một đường thẳng băng
+    const trendData = [...historyData, ...forecastData];
 
     const backendDataState = weatherLoading || anomalyLoading || advisoryLoading
         ? 'Loading live backend data...'
@@ -409,7 +467,7 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
                     <div className="flex-1 min-h-[300px] w-full min-w-0">
                         {chartReady ? (
                         <ResponsiveContainer width="100%" height="100%">
-                            <ComposedChart data={trendData.length > 0 ? trendData : [{ time: '--', tempActual: 0, tempForecast: 0, rainfall: 0, aqi: null }]} margin={{ top: 5, right: -10, left: -25, bottom: 0 }}>
+                            <ComposedChart data={trendData.length > 0 ? trendData : [{ time: '--', tempActual: 0, anomalyTemp: null, tempForecast: 0, rainfall: 0, aqi: null }]} margin={{ top: 5, right: -10, left: -25, bottom: 0 }}>
                                 <defs>
                                     <linearGradient id="rainFill" x1="0" y1="0" x2="0" y2="1">
                                         <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.3} />
@@ -433,8 +491,15 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
                                 <Legend iconType="circle" wrapperStyle={{ paddingTop: '10px', fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase' }} />
 
                                 <Area yAxisId="right" type="monotone" dataKey="rainfall" name="Rain (mm)" stroke="#0ea5e9" fill="url(#rainFill)" strokeWidth={2} />
-                                <Line yAxisId="left" type="monotone" dataKey="tempActual" name="Temp Actual" stroke="#f97316" strokeWidth={3} dot={{ r: 3, fill: '#f97316' }} />
-                                <Line yAxisId="left" type="monotone" dataKey="tempForecast" name="Temp Forecast" stroke="#fdba74" strokeDasharray="4 4" strokeWidth={2} dot={false} opacity={0.6} />
+                                
+                                {/* Đường Nhiệt độ Thực tế (Quá khứ) */}
+                                <Line yAxisId="left" type="monotone" dataKey="tempActual" name="Temp Actual" stroke="#f97316" strokeWidth={3} dot={{ r: 3, fill: '#f97316' }} connectNulls />
+                                
+                                {/* Đường Dự báo (Tương lai) - Nét đứt */}
+                                <Line yAxisId="left" type="monotone" dataKey="tempForecast" name="7-Day Forecast" stroke="#fdba74" strokeDasharray="5 5" strokeWidth={3} dot={false} connectNulls />
+                                
+                                {/* Điểm cảnh báo Anomaly (Chấm đỏ lồi lên) */}
+                                <Line yAxisId="left" type="monotone" dataKey="anomalyTemp" name="Anomaly Alert" stroke="none" isAnimationActive={false} dot={{ r: 6, fill: '#ef4444', stroke: '#ffffff', strokeWidth: 2 }} activeDot={{ r: 8 }} />
                                 
                                 {/* Missing AQI remains null; connectNulls=false to show signal break explicitly. */}
                                 <Line yAxisId="right" type="monotone" dataKey="aqi" name="AQI" stroke="#ef4444" strokeWidth={2} dot={{ r: 2 }} connectNulls={false} />

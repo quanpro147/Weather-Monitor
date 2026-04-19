@@ -1,7 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import os
-
+from services.api.app.routers import summary
+from services.api.app.routers import forecast
 from services.api.app.core.config import settings
 from services.api.app.routers import anomaly, cities, weather
 
@@ -31,7 +32,8 @@ app.add_middleware(
 app.include_router(cities.router)
 app.include_router(weather.router)
 app.include_router(anomaly.router)
-
+app.include_router(summary.router)
+app.include_router(forecast.router)
 
 @app.get("/health")
 def health_check() -> dict[str, str]:

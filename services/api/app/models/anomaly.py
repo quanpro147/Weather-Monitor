@@ -2,6 +2,12 @@ import datetime
 
 from pydantic import BaseModel
 
+class SummaryResponse(BaseModel):
+    """Cấu trúc dữ liệu trả về cho Frontend khi gọi API Summary"""
+    city_id: int
+    city_name: str
+    summary_text: str
+    provider: str
 
 class AnomalyRecord(BaseModel):
     """A single daily weather record annotated with anomaly detection results."""

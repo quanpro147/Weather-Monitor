@@ -1,4 +1,5 @@
-import numpy as np
+import warnings
+
 import pandas as pd
 from sklearn.ensemble import IsolationForest
 from sklearn.preprocessing import StandardScaler
@@ -34,12 +35,22 @@ def detect_anomalies(records: list[dict]) -> list[dict]:
             for rec in records
         ]
 
-    df = pd.DataFrame(records)
-    feature_df = df[FEATURES].copy()
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message=".*ChainedAssignmentError.*",
+            category=FutureWarning,
+        )
 
-    # Fill missing values with per-column median so the model can still train
-    medians = feature_df.median()
-    feature_filled = feature_df.fillna(medians)
+        df = pd.DataFrame(records)
+
+        # Build a standalone numeric frame to avoid chained assignment pitfalls
+        # and keep behavior stable with pandas Copy-on-Write in newer versions.
+        feature_df = df.loc[:, FEATURES].apply(pd.to_numeric, errors="coerce")
+
+        # Fill missing values with per-column median so the model can still train
+        medians = feature_df.median(numeric_only=True)
+        feature_filled = feature_df.fillna(medians)
 
     scaler = StandardScaler()
     X = scaler.fit_transform(feature_filled)

@@ -30,11 +30,18 @@ def setup_cities(conn, cities_df):
     cursor = conn.cursor()
     cities_data = []
     for _, row in cities_df.iterrows():
-        cities_data.append((row['ID'], row['City'], 'Vietnam', row['Latitude'], row['Longitude']))
+        country = row.get('Country', 'Viet Nam')
+        if pd.isna(country):
+            country = 'Viet Nam'
+        cities_data.append((row['ID'], row['City'], str(country), row['Latitude'], row['Longitude']))
     query = """
         INSERT INTO public.cities (city_id, city, country, latitude, longitude)
         VALUES %s
-        ON CONFLICT (city_id) DO NOTHING;
+        ON CONFLICT (city_id) DO UPDATE SET
+            city = EXCLUDED.city,
+            country = EXCLUDED.country,
+            latitude = EXCLUDED.latitude,
+            longitude = EXCLUDED.longitude;
     """
     execute_values(cursor, query, cities_data)
     conn.commit()
@@ -84,7 +91,7 @@ def main():
             start_date = latest_date + datetime.timedelta(days=1)
         else:
             # Chưa từng có data -> lấy từ đầu 2020
-            start_date = datetime.date(2025, 1, 1)
+            start_date = datetime.date(2020, 1, 1)
 
         print(f"Fetching data for {row['City']} from {start_date} to {end_date}")
         url = "https://archive-api.open-meteo.com/v1/archive"

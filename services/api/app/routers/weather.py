@@ -440,7 +440,7 @@ def get_advisory(city_id: int):
         .select("date, temperature_2m_max, temperature_2m_min, rain_sum, wind_speed_10m_max, wind_gusts_10m_max, relative_humidity_2m_mean")
         .eq("city_id", city_id)
         .order("date", desc=True)
-        .limit(1)
+        .limit(3)
     )
 
     if not resp.data:

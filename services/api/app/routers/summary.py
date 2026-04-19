@@ -1,5 +1,6 @@
 import datetime
 import json
+import time
 from fastapi import APIRouter, HTTPException
 
 from services.api.app.core.cache import get_redis
@@ -12,6 +13,27 @@ from services.api.app.models.common import ApiResponse
 router = APIRouter(prefix="/summary", tags=["summary"])
 
 CACHE_TTL = 3600  # Cache 1 giờ để tiết kiệm API Request và tăng tốc độ phản hồi
+
+
+def _is_transient_network_error(exc: Exception) -> bool:
+    message = str(exc)
+    return "WinError 10035" in message or "ReadError" in message or "timed out" in message
+
+
+def _execute_with_retry(query, *, retries: int = 3, backoff_seconds: float = 0.2):
+    last_error: Exception | None = None
+    for attempt in range(retries):
+        try:
+            return query.execute()
+        except Exception as exc:
+            last_error = exc
+            if attempt == retries - 1 or not _is_transient_network_error(exc):
+                raise
+            time.sleep(backoff_seconds * (attempt + 1))
+
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("Unexpected empty retry state")
 
 @router.get("/{city_id}", response_model=ApiResponse[SummaryResponse])
 def get_summary(city_id: int):
@@ -26,7 +48,7 @@ def get_summary(city_id: int):
     db = get_supabase()
 
     # 2. Lấy thông tin thành phố
-    city_res = db.table("cities").select("city").eq("city_id", city_id).execute()
+    city_res = _execute_with_retry(db.table("cities").select("city").eq("city_id", city_id))
     if not city_res.data:
         raise HTTPException(status_code=404, detail="Không tìm thấy thành phố")
     city_name = city_res.data[0]["city"]
@@ -35,13 +57,12 @@ def get_summary(city_id: int):
     today = datetime.date.today()
     start_30_days = today - datetime.timedelta(days=30)
     
-    weather_res = (
+    weather_res = _execute_with_retry(
         db.table("weather_daily")
         .select("*")
         .eq("city_id", city_id)
         .gte("date", start_30_days.isoformat())
         .order("date")
-        .execute()
     )
     
     if not weather_res.data:

@@ -1,5 +1,6 @@
 import datetime
 import json
+import time
 from fastapi import APIRouter, HTTPException, Query
 
 from services.api.app.core.cache import get_redis
@@ -11,6 +12,27 @@ from services.api.app.models.common import ApiResponse
 router = APIRouter(prefix="/forecast", tags=["forecast"])
 
 CACHE_TTL = 21600  # 6 tiếng theo yêu cầu của Leader
+
+
+def _is_transient_network_error(exc: Exception) -> bool:
+    message = str(exc)
+    return "WinError 10035" in message or "ReadError" in message or "timed out" in message
+
+
+def _execute_with_retry(query, *, retries: int = 3, backoff_seconds: float = 0.2):
+    last_error: Exception | None = None
+    for attempt in range(retries):
+        try:
+            return query.execute()
+        except Exception as exc:
+            last_error = exc
+            if attempt == retries - 1 or not _is_transient_network_error(exc):
+                raise
+            time.sleep(backoff_seconds * (attempt + 1))
+
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("Unexpected empty retry state")
 
 @router.get("/{city_id}", response_model=ApiResponse[ForecastResponse])
 def get_forecast(
@@ -28,12 +50,11 @@ def get_forecast(
     db = get_supabase()
 
     # 2. Lấy dữ liệu lịch sử để nạp vào mô hình Numpy
-    weather_res = (
+    weather_res = _execute_with_retry(
         db.table("weather_daily")
         .select("date, temperature_2m_mean")
         .eq("city_id", city_id)
         .order("date")
-        .execute()
     )
 
     if not weather_res.data or len(weather_res.data) < 30:

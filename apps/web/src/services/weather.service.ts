@@ -15,10 +15,34 @@ import type {
 } from '../types/weather';
 
 type CurrentWeatherResponse = { success: boolean; data: WeatherDaily | null; error: string | null };
+type CurrentWeatherBulkResponse = { success: boolean; data: WeatherDaily[] | null; error: string | null };
+const BULK_CHUNK_SIZE = 250;
 
 export async function getCurrentWeather(cityId: number): Promise<WeatherDaily> {
 	const response = await api.get<CurrentWeatherResponse>(`/weather/${cityId}/current`);
 	return requireSuccessData(response, `Failed to load current weather for city ${cityId}`);
+}
+
+export async function getCurrentWeatherBulk(cityIds: number[]): Promise<WeatherDaily[]> {
+	if (cityIds.length === 0) {
+		return [];
+	}
+
+	const deduped = Array.from(new Set(cityIds));
+	const chunks: number[][] = [];
+	for (let i = 0; i < deduped.length; i += BULK_CHUNK_SIZE) {
+		chunks.push(deduped.slice(i, i + BULK_CHUNK_SIZE));
+	}
+
+	const responses = await Promise.all(
+		chunks.map((chunk) =>
+			api.get<CurrentWeatherBulkResponse>('/weather/current/bulk', {
+				city_ids: chunk.join(','),
+			}),
+		),
+	);
+
+	return responses.flatMap((response) => requireSuccessData(response, 'Failed to load bulk current weather'));
 }
 
 export async function getWeatherHistory(cityId: number, params: WeatherHistoryParams): Promise<WeatherDaily[]> {

@@ -1,5 +1,7 @@
 import datetime
 import json
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
@@ -21,6 +23,9 @@ router = APIRouter(prefix="/weather", tags=["weather"])
 
 CACHE_TTL = 21600       # 6h — historical data is stable
 ADVISORY_TTL = 3600     # 1h — advisory is based on latest data
+BULK_CACHE_TTL = 900    # 15m — bulk map payload for fast repeated loads
+MAX_BULK_CITY_IDS = 300
+BULK_ENRICH_WORKERS = 12
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -35,6 +40,39 @@ def _safe_max(values: list[float | None]) -> float | None:
     return max(valid) if valid else None
 
 
+def _is_transient_network_error(exc: Exception) -> bool:
+    message = str(exc)
+    return "WinError 10035" in message or "ReadError" in message or "timed out" in message
+
+
+def _execute_with_retry(query, *, retries: int = 3, backoff_seconds: float = 0.2):
+    last_error: Exception | None = None
+    for attempt in range(retries):
+        try:
+            return query.execute()
+        except Exception as exc:
+            last_error = exc
+            if attempt == retries - 1 or not _is_transient_network_error(exc):
+                raise
+            time.sleep(backoff_seconds * (attempt + 1))
+
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("Unexpected empty retry state")
+
+
+def _parse_city_ids(city_ids: str, *, max_ids: int) -> list[int]:
+    try:
+        ids = [int(x.strip()) for x in city_ids.split(",") if x.strip()]
+    except ValueError:
+        raise HTTPException(status_code=400, detail="city_ids must be comma-separated integers")
+
+    if not ids or len(ids) > max_ids:
+        raise HTTPException(status_code=400, detail=f"Provide between 1 and {max_ids} city IDs")
+
+    return ids
+
+
 # ── Cross-city endpoints (static names — declare before /{city_id}) ───────────
 
 @router.get("/compare", response_model=ApiResponse[list[CityWeatherCompare]])
@@ -42,13 +80,7 @@ def compare_cities(
     city_ids: str = Query(..., description="Comma-separated city IDs, e.g. 1,2,3"),
 ):
     """Compare latest weather across up to 10 cities."""
-    try:
-        ids = [int(x.strip()) for x in city_ids.split(",") if x.strip()]
-    except ValueError:
-        raise HTTPException(status_code=400, detail="city_ids must be comma-separated integers")
-
-    if not ids or len(ids) > 10:
-        raise HTTPException(status_code=400, detail="Provide between 1 and 10 city IDs")
+    ids = _parse_city_ids(city_ids, max_ids=10)
 
     cache_key = f"compare:{','.join(str(i) for i in sorted(ids))}"
     cache = get_redis()
@@ -59,18 +91,17 @@ def compare_cities(
     db = get_supabase()
 
     # Fetch city names in one query
-    city_resp = db.table("cities").select("city_id, city").in_("city_id", ids).execute()
+    city_resp = _execute_with_retry(db.table("cities").select("city_id, city").in_("city_id", ids))
     city_names: dict[int, str] = {row["city_id"]: row["city"] for row in city_resp.data}
 
     # Fetch recent weather for all cities in one query (last 14 days as window)
     cutoff = (datetime.date.today() - datetime.timedelta(days=14)).isoformat()
-    weather_resp = (
+    weather_resp = _execute_with_retry(
         db.table("weather_daily")
         .select("city_id, date, temperature_2m_mean, temperature_2m_max, rain_sum, wind_speed_10m_max, weather_code")
         .in_("city_id", ids)
         .gte("date", cutoff)
         .order("date", desc=True)
-        .execute()
     )
 
     # Take the latest row per city (rows are already sorted desc by date)
@@ -117,14 +148,13 @@ def weather_extremes(
     db = get_supabase()
     field = "temperature_2m_max" if type == "hottest" else "rain_sum"
 
-    resp = (
+    resp = _execute_with_retry(
         db.table("weather_daily")
         .select(f"city_id, date, {field}")
         .gte("date", str(start_date))
         .lte("date", str(end_date))
         .order(field, desc=True)
         .limit(20)  # fetch top 20 to filter out nulls in Python
-        .execute()
     )
 
     # Skip null values (PostgreSQL puts nulls first in DESC order)
@@ -132,11 +162,10 @@ def weather_extremes(
     if best is None:
         raise HTTPException(status_code=404, detail=f"No {type} data found for the given range")
 
-    city_resp = (
+    city_resp = _execute_with_retry(
         db.table("cities")
         .select("city")
         .eq("city_id", best["city_id"])
-        .execute()
     )
     city_name = city_resp.data[0]["city"] if city_resp.data else f"City {best['city_id']}"
 
@@ -154,6 +183,98 @@ def weather_extremes(
 
 # ── Per-city endpoints ────────────────────────────────────────────────────────
 
+@router.get("/current/bulk", response_model=ApiResponse[list[WeatherCurrentResponse]])
+def get_current_weather_bulk(
+    city_ids: str = Query(..., description="Comma-separated city IDs, e.g. 1,2,3"),
+):
+    """Get latest weather payload for multiple cities in one request for map rendering."""
+    ids = _parse_city_ids(city_ids, max_ids=MAX_BULK_CITY_IDS)
+    sorted_ids = sorted(set(ids))
+
+    cache_key = f"weather:bulk:{','.join(str(i) for i in sorted_ids)}"
+    cache = get_redis()
+    cached = cache.get(cache_key)
+    if cached:
+        return ApiResponse(success=True, data=json.loads(cached))
+
+    db = get_supabase()
+
+    weather_resp = _execute_with_retry(
+        db.table("weather_daily")
+        .select("*")
+        .in_("city_id", sorted_ids)
+        .order("date", desc=True)
+    )
+
+    latest_by_city: dict[int, dict] = {}
+    for row in weather_resp.data:
+        city_id = row["city_id"]
+        if city_id not in latest_by_city:
+            latest_by_city[city_id] = row
+
+    city_resp = _execute_with_retry(
+        db.table("cities")
+        .select("city_id, latitude, longitude")
+        .in_("city_id", sorted_ids)
+    )
+    coords_by_city: dict[int, tuple[float, float]] = {
+        row["city_id"]: (float(row["latitude"]), float(row["longitude"]))
+        for row in city_resp.data
+    }
+
+    enrichment_by_city: dict[int, dict[str, float | None]] = {}
+    with ThreadPoolExecutor(max_workers=BULK_ENRICH_WORKERS) as executor:
+        future_map = {
+            executor.submit(fetch_current_enrichment, lat, lng, timeout=2): city_id
+            for city_id, (lat, lng) in coords_by_city.items()
+            if city_id in latest_by_city
+        }
+        for future in as_completed(future_map):
+            city_id = future_map[future]
+            try:
+                enrichment_by_city[city_id] = future.result()
+            except Exception:
+                enrichment_by_city[city_id] = {
+                    "air_quality_index": None,
+                    "pressure": None,
+                    "visibility": None,
+                    "precipitation": None,
+                }
+
+    records: list[WeatherCurrentResponse] = []
+    for city_id in ids:
+        latest_row = latest_by_city.get(city_id)
+        if not latest_row:
+            continue
+
+        enrichment = enrichment_by_city.get(city_id, {
+            "air_quality_index": None,
+            "pressure": None,
+            "visibility": None,
+            "precipitation": None,
+        })
+
+        precipitation = enrichment.get("precipitation")
+        if precipitation is None:
+            precipitation = latest_row.get("rain_sum")
+
+        payload = {
+            **latest_row,
+            "air_quality_index": enrichment.get("air_quality_index"),
+            "pressure": enrichment.get("pressure"),
+            "visibility": enrichment.get("visibility"),
+            "precipitation": precipitation,
+            "aqi": enrichment.get("air_quality_index"),
+        }
+        record = WeatherCurrentResponse(**payload)
+        records.append(record)
+
+        # Reuse per-city cache so single-city endpoint becomes hot as well.
+        cache.setex(f"weather:{city_id}:current", CACHE_TTL, record.model_dump_json())
+
+    cache.setex(cache_key, BULK_CACHE_TTL, json.dumps([r.model_dump(mode="json") for r in records]))
+    return ApiResponse(success=True, data=records)
+
 @router.get("/{city_id}/current", response_model=ApiResponse[WeatherCurrentResponse])
 def get_current_weather(city_id: int):
     """Get the most recent weather record for a city."""
@@ -164,13 +285,12 @@ def get_current_weather(city_id: int):
         return ApiResponse(success=True, data=json.loads(cached))
 
     db = get_supabase()
-    resp = (
+    resp = _execute_with_retry(
         db.table("weather_daily")
         .select("*")
         .eq("city_id", city_id)
         .order("date", desc=True)
         .limit(1)
-        .execute()
     )
 
     if not resp.data:
@@ -178,12 +298,11 @@ def get_current_weather(city_id: int):
 
     latest_row = resp.data[0]
 
-    city_resp = (
+    city_resp = _execute_with_retry(
         db.table("cities")
         .select("latitude, longitude")
         .eq("city_id", city_id)
         .limit(1)
-        .execute()
     )
     if not city_resp.data:
         raise HTTPException(status_code=404, detail=f"City {city_id} not found")
@@ -236,14 +355,13 @@ def get_weather_history(
         return ApiResponse(success=True, data=json.loads(cached))
 
     db = get_supabase()
-    resp = (
+    resp = _execute_with_retry(
         db.table("weather_daily")
         .select("*")
         .eq("city_id", city_id)
         .gte("date", str(start_date))
         .lte("date", str(end_date))
         .order("date")
-        .execute()
     )
 
     records = [WeatherDaily(**row) for row in resp.data]
@@ -274,7 +392,7 @@ def get_weather_stats(
         return ApiResponse(success=True, data=json.loads(cached))
 
     db = get_supabase()
-    resp = (
+    resp = _execute_with_retry(
         db.table("weather_daily")
         .select(
             "temperature_2m_mean, rain_sum, wind_gusts_10m_max, "
@@ -283,7 +401,6 @@ def get_weather_stats(
         .eq("city_id", city_id)
         .gte("date", str(start_date))
         .lte("date", str(end_date))
-        .execute()
     )
 
     if not resp.data:
@@ -318,13 +435,12 @@ def get_advisory(city_id: int):
         return ApiResponse(success=True, data=json.loads(cached))
 
     db = get_supabase()
-    resp = (
+    resp = _execute_with_retry(
         db.table("weather_daily")
         .select("date, temperature_2m_max, rain_sum, wind_speed_10m_max, relative_humidity_2m_mean")
         .eq("city_id", city_id)
         .order("date", desc=True)
         .limit(1)
-        .execute()
     )
 
     if not resp.data:

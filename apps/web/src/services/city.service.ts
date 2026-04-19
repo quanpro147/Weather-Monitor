@@ -10,6 +10,11 @@ import type {
 export async function listCities(params: ListCitiesParams = {}): Promise<City[]> {
 	const response = await api.get<ListCitiesResponse>('/cities', {
 		country: params.country,
+		min_lat: params.min_lat,
+		max_lat: params.max_lat,
+		min_lng: params.min_lng,
+		max_lng: params.max_lng,
+		limit: params.limit,
 	});
 	return requireSuccessData(response, 'Failed to load city list');
 }

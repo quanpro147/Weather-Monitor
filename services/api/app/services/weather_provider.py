@@ -15,7 +15,7 @@ def _fetch_json(url: str, timeout: int = 6) -> dict[str, Any]:
     return json.loads(payload)
 
 
-def fetch_current_enrichment(latitude: float, longitude: float) -> dict[str, float | None]:
+def fetch_current_enrichment(latitude: float, longitude: float, timeout: int = 6) -> dict[str, float | None]:
     """Fetch real-time AQI, pressure, visibility and precipitation for coordinates.
 
     Uses Open-Meteo public APIs (no API key required).
@@ -47,7 +47,7 @@ def fetch_current_enrichment(latitude: float, longitude: float) -> dict[str, flo
     }
 
     try:
-        weather_payload = _fetch_json(f"{WEATHER_BASE_URL}?{weather_query}")
+        weather_payload = _fetch_json(f"{WEATHER_BASE_URL}?{weather_query}", timeout=timeout)
         current_weather = weather_payload.get("current", {}) if isinstance(weather_payload, dict) else {}
 
         pressure = current_weather.get("pressure_msl")
@@ -62,7 +62,7 @@ def fetch_current_enrichment(latitude: float, longitude: float) -> dict[str, flo
         pass
 
     try:
-        air_payload = _fetch_json(f"{AIR_QUALITY_BASE_URL}?{air_query}")
+        air_payload = _fetch_json(f"{AIR_QUALITY_BASE_URL}?{air_query}", timeout=timeout)
         current_air = air_payload.get("current", {}) if isinstance(air_payload, dict) else {}
         aqi = current_air.get("european_aqi")
         result["air_quality_index"] = float(aqi) if aqi is not None else None

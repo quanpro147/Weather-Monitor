@@ -17,7 +17,7 @@ import { useAnomalyData } from '../../../hooks/useAnomalyData';
 import { useGlobalFilter } from '../../../hooks/useGlobalFilter';
 import { useWeatherData } from '../../../hooks/useWeatherData';
 import { listCities } from '../../../services/city.service';
-import { getCurrentWeather, getWeatherAdvisory } from '../../../services/weather.service';
+import { getCurrentWeatherBulk, getWeatherAdvisory } from '../../../services/weather.service';
 import type { AdvisoryResponse, WeatherDaily } from '../../../types/weather';
 
 // Định nghĩa kiểu dữ liệu cho Props của Map để tránh lỗi TypeScript
@@ -26,6 +26,7 @@ interface InteractiveMapProps {
     data: MapDataPoint[];
     isLoading?: boolean;
     error?: string | null;
+    scopeMode?: 'vietnam' | 'global';
 }
 
 // Bắt buộc dùng Dynamic Import tắt SSR cho Leaflet Map
@@ -104,7 +105,7 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
     const [mapLoading, setMapLoading] = useState(false);
     const [mapError, setMapError] = useState<string | null>(null);
     
-    const { cityId, startDate, endDate } = useGlobalFilter();
+    const { cityId, scopeMode, startDate, endDate } = useGlobalFilter();
     const {
         current,
         history,
@@ -129,36 +130,39 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
             setMapError(null);
 
             try {
-                const cities = await listCities();
+                let cities;
+                if (scopeMode === 'vietnam') {
+                    const vnByCanonical = await listCities({ country: 'Viet Nam' });
+                    cities = vnByCanonical.length > 0 ? vnByCanonical : await listCities({ country: 'Vietnam' });
+                } else {
+                    cities = await listCities({ limit: 200 });
+                }
                 const citySlice = cities.slice(0, 25);
-
-                const currentResults = await Promise.allSettled(
-                    citySlice.map(async (city) => {
-                        const currentWeather = (await getCurrentWeather(city.city_id)) as WeatherWithOptionalRealtime;
-                        return { city, currentWeather };
-                    }),
+                const currentRows = await getCurrentWeatherBulk(citySlice.map((city) => city.city_id));
+                const currentByCityId = new Map<number, WeatherWithOptionalRealtime>(
+                    currentRows.map((item) => [item.city_id, item as WeatherWithOptionalRealtime]),
                 );
 
                 if (!active) {
                     return;
                 }
 
-                const nextMapData: MapDataPoint[] = currentResults.flatMap((result) => {
-                    if (result.status !== 'fulfilled') {
+                const nextMapData: MapDataPoint[] = citySlice.flatMap((city) => {
+                    const currentWeather = currentByCityId.get(city.city_id);
+                    if (!currentWeather) {
                         return [];
                     }
 
-                    const payload = result.value;
                     return [
                         {
-                            id: payload.city.city_id,
-                            city: payload.city.city,
-                            lat: payload.city.latitude,
-                            lng: payload.city.longitude,
+                            id: city.city_id,
+                            city: city.city,
+                            lat: city.latitude,
+                            lng: city.longitude,
                             // Missing metrics MUST remain null and never be forced to 0.
-                            temp: payload.currentWeather.temperature_2m_max ?? payload.currentWeather.temperature_2m_mean ?? null,
-                            aqi: payload.currentWeather.air_quality_index ?? payload.currentWeather.aqi ?? null,
-                            rain: payload.currentWeather.precipitation ?? payload.currentWeather.rain_sum ?? null,
+                            temp: currentWeather.temperature_2m_max ?? currentWeather.temperature_2m_mean ?? null,
+                            aqi: currentWeather.air_quality_index ?? currentWeather.aqi ?? null,
+                            rain: currentWeather.precipitation ?? currentWeather.rain_sum ?? null,
                         },
                     ];
                 });
@@ -186,7 +190,7 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
         return () => {
             active = false;
         };
-    }, [cityId]);
+    }, [cityId, scopeMode]);
 
     // Fetch Advisory Data
     useEffect(() => {
@@ -391,7 +395,7 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
                         <span className="text-[9px] font-bold text-gray-400 uppercase">Vietnam Region</span>
                     </div>
                     <div className="relative flex-1 min-h-[300px] overflow-hidden rounded-xl border border-gray-100 dark:border-[#2a2a2a] bg-gray-50 dark:bg-[#151515] flex items-center justify-center">
-                        <InteractiveMap isDark={isDark} data={mapData} isLoading={mapLoading} error={mapError} />
+                        <InteractiveMap isDark={isDark} data={mapData} isLoading={mapLoading} error={mapError} scopeMode={scopeMode} />
                     </div>
                 </article>
 

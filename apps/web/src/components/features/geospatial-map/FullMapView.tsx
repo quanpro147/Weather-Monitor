@@ -1,14 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useGlobalFilter } from '../../../hooks/useGlobalFilter';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { listCities } from '../../../services/city.service';
-import { getCurrentWeather } from '../../../services/weather.service';
+import { getCurrentWeatherBulk } from '../../../services/weather.service';
 import type { WeatherDaily } from '../../../types/weather';
 import type { City } from '../../../types/city';
-import type { MapDataPoint } from './InteractiveMap';
+import type { MapDataPoint, MapViewportBounds } from './InteractiveMap';
 
 type LayerId = 'aqi' | 'temp' | 'rain';
+type MapLoadMode = 'viewport' | 'overview';
 
 type WeatherWithRealtime = WeatherDaily & {
     aqi?: number | null;
@@ -34,7 +35,7 @@ const InteractiveMap = dynamic(
 export default function FullMapView() {
     const { isDark } = useTheme();
     const [activeLayer, setActiveLayer] = useState<LayerId>('rain'); // Theo yêu cầu Rainfall Radar khởi tạo
-    const { cityId } = useGlobalFilter();
+    const { cityId, scopeMode } = useGlobalFilter();
 
     const getRiskLevel = (aqi: number) => {
         if (aqi <= 50) return 'Good (0-50)';
@@ -68,9 +69,23 @@ export default function FullMapView() {
     const [mapData, setMapData] = useState<MapDataPoint[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [mapViewport, setMapViewport] = useState<MapViewportBounds | null>(null);
+    const [loadMode, setLoadMode] = useState<MapLoadMode>('overview');
+    const [visibleStationCount, setVisibleStationCount] = useState(0);
+    const fetchSeqRef = useRef(0);
     const [quickInsights, setQuickInsights] = useState<QuickInsightsState>(
         buildThemePreset(true, 'Ben Tre')
     );
+
+    const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+    const normalizeViewport = (viewport: MapViewportBounds): MapViewportBounds => ({
+        ...viewport,
+        minLat: clamp(viewport.minLat, -90, 90),
+        maxLat: clamp(viewport.maxLat, -90, 90),
+        minLng: clamp(viewport.minLng, -180, 180),
+        maxLng: clamp(viewport.maxLng, -180, 180),
+    });
 
     const getScopeLabel = (cityList: City[], selectedCityId: number | null) => {
         const selected = selectedCityId === null ? null : cityList.find((city) => city.city_id === selectedCityId);
@@ -82,20 +97,69 @@ export default function FullMapView() {
     };
 
     const fetchMapData = async () => {
+        const requiresViewport = scopeMode === 'global' && loadMode === 'viewport';
+        if (requiresViewport && !mapViewport) {
+            return;
+        }
+
+        const requestId = ++fetchSeqRef.current;
         setIsLoading(true);
         setError(null);
 
         try {
-            const cityList = await listCities();
+            let cityList: City[];
+
+            if (scopeMode === 'vietnam') {
+                const vnByCanonical = await listCities({ country: 'Viet Nam' });
+                cityList = vnByCanonical.length > 0 ? vnByCanonical : await listCities({ country: 'Vietnam' });
+            } else if (requiresViewport && mapViewport) {
+                const viewport = normalizeViewport(mapViewport);
+                if (viewport.minLng <= viewport.maxLng) {
+                    cityList = await listCities({
+                        min_lat: viewport.minLat,
+                        max_lat: viewport.maxLat,
+                        min_lng: viewport.minLng,
+                        max_lng: viewport.maxLng,
+                        limit: VIEWPORT_CITY_LIMIT,
+                    });
+                } else {
+                    const [westWrap, eastWrap] = await Promise.all([
+                        listCities({
+                            min_lat: viewport.minLat,
+                            max_lat: viewport.maxLat,
+                            min_lng: viewport.minLng,
+                            max_lng: 180,
+                            limit: VIEWPORT_CITY_LIMIT,
+                        }),
+                        listCities({
+                            min_lat: viewport.minLat,
+                            max_lat: viewport.maxLat,
+                            min_lng: -180,
+                            max_lng: viewport.maxLng,
+                            limit: VIEWPORT_CITY_LIMIT,
+                        }),
+                    ]);
+                    cityList = Array.from(new Map([...westWrap, ...eastWrap].map((item) => [item.city_id, item])).values());
+                }
+            } else {
+                // Global overview: snapshot for broad coverage while keeping render smooth.
+                cityList = await listCities({ limit: OVERVIEW_CITY_LIMIT });
+            }
+
+            if (requestId !== fetchSeqRef.current) {
+                return;
+            }
+
             setCities(cityList);
+            setVisibleStationCount(cityList.length);
 
             const scopeLabel = getScopeLabel(cityList, cityId);
-
-            const weatherResults = await Promise.allSettled(
-                cityList.map(async (city) => {
-                    const weather = (await getCurrentWeather(city.city_id)) as WeatherWithRealtime;
-                    return { city, weather };
-                })
+            const weatherRows = await getCurrentWeatherBulk(cityList.map((city) => city.city_id));
+            if (requestId !== fetchSeqRef.current) {
+                return;
+            }
+            const weatherByCityId = new Map<number, WeatherWithRealtime>(
+                weatherRows.map((row) => [row.city_id, row as WeatherWithRealtime])
             );
 
             const nextMapData: MapDataPoint[] = [];
@@ -103,12 +167,12 @@ export default function FullMapView() {
             let worstAqiCity = '--';
             let offlineCount = 0;
 
-            weatherResults.forEach((result) => {
-                if (result.status !== 'fulfilled') {
+            cityList.forEach((city) => {
+                const weather = weatherByCityId.get(city.city_id);
+                if (!weather) {
                     return;
                 }
 
-                const { city, weather } = result.value;
                 const aqi = weather.air_quality_index ?? weather.aqi ?? null;
                 const temp = weather.temperature ?? weather.temperature_2m_mean ?? weather.temperature_2m_max ?? null;
                 const rain = weather.precipitation ?? weather.rain_sum ?? null;
@@ -161,17 +225,34 @@ export default function FullMapView() {
                 offlineCount,
             });
         } catch (nextError) {
+            if (requestId !== fetchSeqRef.current) {
+                return;
+            }
             setMapData([]);
             setError(nextError instanceof Error ? nextError.message : 'Failed to load geospatial data');
             setQuickInsights(buildThemePreset(isDark, isDark ? 'Ben Tre' : 'Binh Dinh'));
         } finally {
-            setIsLoading(false);
+            if (requestId === fetchSeqRef.current) {
+                setIsLoading(false);
+            }
         }
     };
 
     useEffect(() => {
-        void fetchMapData();
-    }, [cityId]);
+        const timer = setTimeout(() => {
+            void fetchMapData();
+        }, FETCH_DEBOUNCE_MS);
+
+        return () => clearTimeout(timer);
+    }, [cityId, scopeMode, loadMode, mapViewport]);
+
+    useEffect(() => {
+        if (scopeMode === 'global') {
+            setLoadMode('viewport');
+            return;
+        }
+        setLoadMode('overview');
+    }, [scopeMode]);
 
     useEffect(() => {
         if (mapData.length === 0 && !isLoading) {
@@ -204,7 +285,20 @@ export default function FullMapView() {
                 
                 {/* Lớp Bản đồ ở dưới cùng (z-0) */}
                 <div className="absolute inset-0 z-0">
-                    <InteractiveMap isDark={isDark} data={mapData} isLoading={isLoading} error={error} activeLayer={activeLayer} /> 
+                    <InteractiveMap
+                        isDark={isDark}
+                        data={mapData}
+                        isLoading={isLoading}
+                        error={error}
+                        activeLayer={activeLayer}
+                        scopeMode={scopeMode}
+                        onViewportChange={(nextViewport) => {
+                            if (scopeMode !== 'global') {
+                                return;
+                            }
+                            setMapViewport(nextViewport);
+                        }}
+                    /> 
                 </div>
 
                 {/* --- FLOATING PANELS (Đè lên trên bản đồ) --- */}
@@ -219,13 +313,20 @@ export default function FullMapView() {
                     </h3>
                     <div className="space-y-4">
                         <div>
-                            <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Scope</p>
+                            <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Monitoring Scope</p>
                             <p className={`text-sm font-black mt-1 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                                {quickInsights.scopeLabel}
+                                {scopeMode === 'global' ? 'Global View' : 'Viet Nam Provinces'}
+                            </p>
+                            <p className="text-[10px] mt-1 text-cyan-500 font-semibold">
+                                {scopeMode === 'global'
+                                    ? (loadMode === 'viewport' ? 'Viewport mode: pan/zoom to refresh local region' : 'Overview mode: fast global sample')
+                                    : 'National Full Grid'}
                             </p>
                         </div>
                         <div>
-                            <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Worst AQI Station</p>
+                            <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">
+                                {scopeMode === 'global' ? 'Global Worst AQI' : 'National Worst AQI'}
+                            </p>
                             <p className={`text-sm font-black flex items-center gap-2 mt-1 ${isDark ? 'text-white' : 'text-gray-900'}`}>
                                 {quickInsights.worstAqiCity} 
                                 <span className={`px-1.5 py-0.5 rounded text-[10px] font-black ${quickInsights.worstAqiValue > 150 ? 'bg-red-500/10 text-red-500' : 'bg-orange-500/10 text-orange-500'}`}>
@@ -240,6 +341,12 @@ export default function FullMapView() {
                                 {quickInsights.offlineCount} <span className="text-[10px] font-normal text-gray-500 ml-1">(Check connectivity)</span>
                             </p>
                         </div>
+                        <div className="pt-2 border-t border-gray-200 dark:border-gray-800">
+                            <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Loaded Stations</p>
+                            <p className={`text-sm font-black mt-1 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                {visibleStationCount}
+                            </p>
+                        </div>
                     </div>
                 </div>
 
@@ -247,6 +354,32 @@ export default function FullMapView() {
                 <div className={`absolute top-5 right-5 z-[400] rounded-xl p-1.5 shadow-xl border backdrop-blur-md flex flex-col gap-1 transition-colors ${
                     isDark ? 'bg-[#101010]/85 border-[#2a2a2a]' : 'bg-white/85 border-gray-200'
                 }`}>
+                    {scopeMode === 'global' && (
+                        <>
+                            <button
+                                onClick={() => setLoadMode('viewport')}
+                                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all ${
+                                    loadMode === 'viewport'
+                                        ? 'bg-cyan-500 text-white shadow-md'
+                                        : `hover:bg-gray-200/50 dark:hover:bg-[#2a2a2a]/50 ${isDark ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-black'}`
+                                }`}
+                            >
+                                <i className="fa-solid fa-crop-simple w-4 text-center"></i>
+                                Viewport Focus
+                            </button>
+                            <button
+                                onClick={() => setLoadMode('overview')}
+                                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all ${
+                                    loadMode === 'overview'
+                                        ? 'bg-cyan-500 text-white shadow-md'
+                                        : `hover:bg-gray-200/50 dark:hover:bg-[#2a2a2a]/50 ${isDark ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-black'}`
+                                }`}
+                            >
+                                <i className="fa-solid fa-earth-asia w-4 text-center"></i>
+                                Global Overview
+                            </button>
+                        </>
+                    )}
                     {[
                         { id: 'aqi', icon: 'fa-smog', label: 'AQI Heatmap' },
                         { id: 'temp', icon: 'fa-temperature-half', label: 'Temperature' },
@@ -271,3 +404,7 @@ export default function FullMapView() {
         </div>
     );
 }
+
+const OVERVIEW_CITY_LIMIT = 220;
+const VIEWPORT_CITY_LIMIT = 160;
+const FETCH_DEBOUNCE_MS = 220;

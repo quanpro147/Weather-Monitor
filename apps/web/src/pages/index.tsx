@@ -2,7 +2,11 @@ import Head from 'next/head';
 import MainLayout from '../components/layout/MainLayout';
 import DashboardOverview from '../components/features/dashboard/DashboardOverview';
 import AiSummaryPanel from '../components/features/insight-hub/AiSummaryPanel';
+import { useGlobalFilter } from '../hooks/useGlobalFilter';
+
 export default function Home() {
+    const { cityId } = useGlobalFilter();
+
     return (
         <>
             <Head>
@@ -11,7 +15,7 @@ export default function Home() {
             
             <MainLayout>
                 <DashboardOverview />
-                    <AiSummaryPanel cityId={701} />
+                <AiSummaryPanel cityId={cityId} />
             </MainLayout>
         </>
     );

@@ -6,6 +6,7 @@ import 'leaflet/dist/leaflet.css';
 import 'react-leaflet-cluster/dist/assets/MarkerCluster.css';
 import 'react-leaflet-cluster/dist/assets/MarkerCluster.Default.css';
 import MapLegend from './MapLegend';
+import { useTheme } from '../../../contexts/ThemeContext';
 
 export type LayerId = 'aqi' | 'temp' | 'rain';
 type ScopeMode = 'vietnam' | 'global';
@@ -28,8 +29,8 @@ export interface MapViewportBounds {
     zoom: number;
 }
 
+// Đã xóa isDark khỏi Interface này
 interface InteractiveMapProps {
-    isDark?: boolean;
     data: MapDataPoint[];
     isLoading?: boolean;
     error?: string | null;
@@ -38,7 +39,6 @@ interface InteractiveMapProps {
     onViewportChange?: (bounds: MapViewportBounds) => void;
 }
 
-// Logic phối màu động cho từng Layer
 const getPointColor = (point: MapDataPoint, layer: LayerId) => {
     if (layer === 'aqi') {
         const val = point.aqi;
@@ -61,7 +61,7 @@ const getPointColor = (point: MapDataPoint, layer: LayerId) => {
     if (layer === 'rain') {
         const val = point.rain;
         if (val === null || val === undefined) return '#64748b';
-        if (val === 0) return '#9ca3af'; // Màu xám nhạt nếu ko mưa
+        if (val === 0) return '#9ca3af'; 
         if (val <= 5) return '#7dd3fc';
         if (val <= 15) return '#38bdf8';
         if (val <= 50) return '#0284c7';
@@ -75,7 +75,6 @@ function formatMetric(value: number | null | undefined, suffix: string): string 
     return `${value}${suffix}`;
 }
 
-// Hàm tạo Icon động
 function createStationIcon(point: MapDataPoint, activeLayer: LayerId, isDark: boolean): L.DivIcon {
     const fillColor = getPointColor(point, activeLayer);
     const borderColor = isDark ? '#1e1e1e' : '#ffffff';
@@ -101,9 +100,7 @@ function ViewportObserver({ onViewportChange }: { onViewportChange?: (bounds: Ma
     const lastKeyRef = useRef<string>('');
 
     const publishBounds = (map: L.Map) => {
-        if (!onViewportChange) {
-            return;
-        }
+        if (!onViewportChange) return;
 
         const bounds = map.getBounds();
         const payload: MapViewportBounds = {
@@ -115,34 +112,31 @@ function ViewportObserver({ onViewportChange }: { onViewportChange?: (bounds: Ma
         };
 
         const nextKey = `${payload.minLat.toFixed(3)}:${payload.maxLat.toFixed(3)}:${payload.minLng.toFixed(3)}:${payload.maxLng.toFixed(3)}:${payload.zoom}`;
-        if (nextKey === lastKeyRef.current) {
-            return;
-        }
+        if (nextKey === lastKeyRef.current) return;
 
         lastKeyRef.current = nextKey;
         onViewportChange(payload);
     };
 
     const map = useMapEvents({
-        moveend() {
-            publishBounds(map);
-        },
-        zoomend() {
-            publishBounds(map);
-        },
+        moveend() { publishBounds(map); },
+        zoomend() { publishBounds(map); },
     });
 
-    useEffect(() => {
-        publishBounds(map);
-    }, [map]);
-
+    useEffect(() => { publishBounds(map); }, [map]);
     return null;
 }
 
-export default function InteractiveMap({ isDark = true, data, isLoading = false, error = null, activeLayer = 'aqi', scopeMode = 'vietnam', onViewportChange }: InteractiveMapProps) {
+// BỎ HẲN isDark KHỎI THAM SỐ
+export default function InteractiveMap({ data, isLoading = false, error = null, activeLayer = 'aqi', scopeMode = 'vietnam', onViewportChange }: InteractiveMapProps) {
+    
+    // DUY NHẤT 1 SOURCE OF TRUTH: Lấy từ Context
+    const { isDark } = useTheme();
+
+    // Sửa lại URL Light Mode chuẩn
     const tileUrl = isDark
         ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-        : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+        : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
 
     const mapCenter: [number, number] = scopeMode === 'global' ? [20, 0] : [16.4, 106.5];
     const mapZoom = scopeMode === 'global' ? 2.25 : 5.2;
@@ -162,6 +156,8 @@ export default function InteractiveMap({ isDark = true, data, isLoading = false,
             >
                 <MapResizer />
                 <ViewportObserver onViewportChange={onViewportChange} />
+                
+                {/* Thuộc tính key={tileUrl} ép render lại bản đồ khi đổi sáng tối */}
                 <TileLayer key={tileUrl} url={tileUrl} attribution='&copy; CARTO' />
 
                 <MarkerClusterGroup chunkedLoading maxClusterRadius={42} showCoverageOnHover={false}>
@@ -185,6 +181,11 @@ export default function InteractiveMap({ isDark = true, data, isLoading = false,
                                             <span className="font-bold text-blue-500">Rain:</span>
                                             <span className={`font-black ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>{formatMetric(point.rain, ' mm')}</span>
                                         </div>
+                                        {(point.aqi === null || point.aqi === undefined) && (
+                                            <div className={`mt-1 whitespace-normal text-[9px] font-semibold text-center p-1.5 rounded border ${isDark ? 'text-slate-400 bg-slate-800/50 border-slate-700' : 'text-slate-500 bg-slate-100 border-slate-200'}`}>
+                                                Sensor Offline / No Data
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </Popup>
@@ -193,15 +194,15 @@ export default function InteractiveMap({ isDark = true, data, isLoading = false,
                 </MarkerClusterGroup>
             </MapContainer>
 
-            {showBlockingLoading && <div className="absolute inset-0 z-[500] grid place-items-center bg-black/30 text-xs font-bold uppercase text-white">Loading data...</div>}
+            {showBlockingLoading && <div className="absolute inset-0 z-[500] grid place-items-center bg-black/30 text-xs font-bold uppercase tracking-widest text-white">Loading data...</div>}
             {showInlineLoading && (
                 <div className="absolute top-3 left-3 z-[500] rounded-md bg-black/45 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
                     Updating viewport...
                 </div>
             )}
             
-            {/* Truyền activeLayer xuống MapLegend để đổi Legend tương ứng */}
-            <MapLegend isDark={isDark} activeLayer={activeLayer} />
+            {/* MapLegend không cần truyền isDark nữa */}
+            <MapLegend activeLayer={activeLayer} />
         </div>
     );
 }

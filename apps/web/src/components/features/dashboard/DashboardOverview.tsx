@@ -17,7 +17,9 @@ import { useAnomalyData } from '../../../hooks/useAnomalyData';
 import { useGlobalFilter } from '../../../hooks/useGlobalFilter';
 import { useWeatherData } from '../../../hooks/useWeatherData';
 import { listCities } from '../../../services/city.service';
+import { getForecast } from '../../../services/forecast.service';
 import { getCurrentWeatherBulk, getWeatherAdvisory } from '../../../services/weather.service';
+import type { AnomalyRecord } from '../../../types/anomaly';
 import type { AdvisoryResponse, WeatherDaily } from '../../../types/weather';
 
 interface InteractiveMapProps {
@@ -58,10 +60,7 @@ interface ForecastTrend {
     predicted_temperature: number;
 }
 
-interface AnomalyRecord {
-    date: string;
-    is_anomaly: boolean;
-}
+type ChartAnomalyRecord = Pick<AnomalyRecord, 'date' | 'is_anomaly'>;
 // ------------------------------------------------
 
 // Hàm định dạng số liệu, trả về '--' nếu missing data
@@ -109,7 +108,7 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
     
     // --- KHAI BÁO STATE CHO TÍNH NĂNG MỚI MÀ NHÁNH FEAT ĐANG THIẾU ---
     const [forecastList, setForecastList] = useState<ForecastTrend[]>([]);
-    const [anomalyList, setAnomalyList] = useState<AnomalyRecord[]>([]);
+    const [anomalyList, setAnomalyList] = useState<ChartAnomalyRecord[]>([]);
     // ----------------------------------------------------------------
     
     // API Hooks
@@ -128,6 +127,7 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
         error: weatherError,
     } = useWeatherData({ cityId, startDate, endDate, enabled: cityId !== null });
     const {
+        records: anomalyRecords,
         anomalyCount,
         isLoading: anomalyLoading,
     } = useAnomalyData({ cityId, startDate, endDate, enabled: cityId !== null });
@@ -237,26 +237,50 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
         return () => { active = false; };
     }, [cityId]);
 
-    // Fetch Forecast & Anomalies cho Biểu đồ
+    // Fetch Forecast cho biểu đồ (Anomaly dùng trực tiếp từ hook useAnomalyData)
     useEffect(() => {
-        if (!cityId) return;
+        let active = true;
 
-        // 1. Gọi API Forecast (7 ngày)
-        fetch(`http://localhost:8000/forecast/${cityId}?days=7`)
-            .then(res => res.json())
-            .then(data => {
-                if (data.success) setForecastList(data.data.trends || []);
-            }).catch(console.error);
+        const loadForecast = async () => {
+            if (cityId === null) {
+                setForecastList([]);
+                return;
+            }
 
-        // 2. Gọi API Anomaly
-        if (startDate && endDate) {
-            fetch(`http://localhost:8000/anomaly/${cityId}?start_date=${startDate}&end_date=${endDate}`)
-                .then(res => res.json())
-                .then(data => {
-                    if (data.success) setAnomalyList(data.data || []);
-                }).catch(console.error);
+            try {
+                const trends = await getForecast(cityId, 7);
+                if (!active) {
+                    return;
+                }
+                setForecastList(trends);
+            } catch {
+                if (!active) {
+                    return;
+                }
+                setForecastList([]);
+            }
+        };
+
+        void loadForecast();
+
+        return () => {
+            active = false;
+        };
+    }, [cityId]);
+
+    useEffect(() => {
+        if (cityId === null) {
+            setAnomalyList([]);
+            return;
         }
-    }, [cityId, startDate, endDate]);
+
+        setAnomalyList(
+            anomalyRecords.map((item) => ({
+                date: item.date,
+                is_anomaly: item.is_anomaly,
+            }))
+        );
+    }, [cityId, anomalyRecords]);
 
     // Data Mapping
     const realtime = (current ?? null) as WeatherWithOptionalRealtime | null;

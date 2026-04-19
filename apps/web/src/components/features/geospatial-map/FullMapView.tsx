@@ -286,7 +286,6 @@ export default function FullMapView() {
                 {/* Lớp Bản đồ ở dưới cùng (z-0) */}
                 <div className="absolute inset-0 z-0">
                     <InteractiveMap
-                        isDark={isDark}
                         data={mapData}
                         isLoading={isLoading}
                         error={error}

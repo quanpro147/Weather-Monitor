@@ -1,13 +1,14 @@
 import React from 'react';
 import type { LayerId } from './InteractiveMap';
+import { useTheme } from '../../../contexts/ThemeContext'; // Import Context
 
 interface MapLegendProps {
-    isDark?: boolean;
     activeLayer?: LayerId;
 }
 
-export default function MapLegend({ isDark = true, activeLayer = 'aqi' }: MapLegendProps) {
-    // Định nghĩa Legend cho từng Layer
+export default function MapLegend({ activeLayer = 'aqi' }: MapLegendProps) {
+    const { isDark } = useTheme(); // Lấy trực tiếp từ Context
+
     const legends = {
         aqi: {
             title: 'AQI Risk Level',

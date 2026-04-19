@@ -20,7 +20,6 @@ import { listCities } from '../../../services/city.service';
 import { getCurrentWeatherBulk, getWeatherAdvisory } from '../../../services/weather.service';
 import type { AdvisoryResponse, WeatherDaily } from '../../../types/weather';
 
-// Định nghĩa kiểu dữ liệu cho Props của Map để tránh lỗi TypeScript
 interface InteractiveMapProps {
     isDark?: boolean;
     data: MapDataPoint[];
@@ -53,6 +52,17 @@ type WeatherWithOptionalRealtime = WeatherDaily & {
     wind_speed?: number | null;
     precipitation?: number | null;
 };
+
+interface ForecastTrend {
+    date: string;
+    predicted_temperature: number;
+}
+
+interface AnomalyRecord {
+    date: string;
+    is_anomaly: boolean;
+}
+// ------------------------------------------------
 
 // Hàm định dạng số liệu, trả về '--' nếu missing data
 function formatNumber(value: number | null | undefined, digits = 1): string {
@@ -96,6 +106,11 @@ const aiSummaries = [
 export default function DashboardOverview({ isDark = true }: DashboardOverviewProps) {
     const [activeAlertTab, setActiveAlertTab] = useState<AlertTab>('live');
     const [chartReady, setChartReady] = useState(false);
+    
+    // --- KHAI BÁO STATE CHO TÍNH NĂNG MỚI MÀ NHÁNH FEAT ĐANG THIẾU ---
+    const [forecastList, setForecastList] = useState<ForecastTrend[]>([]);
+    const [anomalyList, setAnomalyList] = useState<AnomalyRecord[]>([]);
+    // ----------------------------------------------------------------
     
     // API Hooks
     const [advisory, setAdvisory] = useState<AdvisoryResponse | null>(null);

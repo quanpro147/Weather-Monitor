@@ -8,13 +8,9 @@ import {
 	XAxis,
 	YAxis,
 } from 'recharts';
+import useSWR from 'swr';
 import { useTheme } from '../../../contexts/ThemeContext';
-
-const crossCityMock = [
-	{ city: 'Ha Noi', temp: 32, aqi: 150, rain: 20 },
-	{ city: 'Da Nang', temp: 28, aqi: 65, rain: 150 },
-	{ city: 'TP.HCM', temp: 35, aqi: 110, rain: 0 },
-];
+import { getCrossCity } from '../../../services/analytics.service';
 
 type MetricKey = 'temp' | 'aqi' | 'rain';
 
@@ -55,7 +51,11 @@ export default function CrossCityChart() {
 	const [metric, setMetric] = React.useState<MetricKey>('aqi');
 	const { isDark } = useTheme();
 	const config = metricConfig[metric];
-	const minChartWidth = Math.max(640, crossCityMock.length * 120);
+
+	const { data, isLoading, error } = useSWR('analytics:cross-city:vietnam', () => getCrossCity('vietnam'));
+
+	const cities = data?.cities ?? [];
+	const minChartWidth = Math.max(640, cities.length * 120);
 
 	return (
 		<section className={`rounded-xl border p-5 shadow-sm ${isDark ? 'border-[#2a2a2a] bg-[#151515]' : 'border-gray-200 bg-white'}`}>
@@ -91,47 +91,60 @@ export default function CrossCityChart() {
 				</div>
 			</div>
 
-			<div className="w-full overflow-x-auto no-scrollbar">
-				<div style={{ minWidth: `${minChartWidth}px`, height: '300px' }}>
-					<ResponsiveContainer width="100%" height="100%">
-						<BarChart data={crossCityMock} margin={{ top: 8, right: 12, left: -16, bottom: 4 }} barCategoryGap="18%" barGap={2}>
-							<defs>
-								<linearGradient id={config.gradientId} x1="0" y1="0" x2="0" y2="1">
-									<stop offset="0%" stopColor={config.top} stopOpacity={0.95} />
-									<stop offset="60%" stopColor={config.bottom} stopOpacity={0.8} />
-									<stop offset="100%" stopColor={config.bottom} stopOpacity={0.35} />
-								</linearGradient>
-							</defs>
-
-							<CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#334155' : '#cbd5e1'} strokeOpacity={0.2} vertical={false} />
-							<XAxis
-								dataKey="city"
-								tick={{ fill: isDark ? '#94a3b8' : '#64748b', fontSize: 11, fontWeight: 700 }}
-								axisLine={{ stroke: isDark ? '#334155' : '#cbd5e1' }}
-								tickLine={false}
-							/>
-							<YAxis
-								tick={{ fill: isDark ? '#94a3b8' : '#64748b', fontSize: 11 }}
-								axisLine={{ stroke: isDark ? '#334155' : '#cbd5e1' }}
-								tickLine={false}
-							/>
-							<Tooltip
-								cursor={{ fill: isDark ? '#1f2937' : '#e2e8f0', opacity: 0.35 }}
-								contentStyle={{
-									backgroundColor: isDark ? '#0f1115' : '#ffffff',
-									border: `1px solid ${isDark ? '#2a2a2a' : '#e2e8f0'}`,
-									borderRadius: '8px',
-									color: isDark ? '#e5e7eb' : '#0f172a',
-									fontSize: '11px',
-								}}
-								formatter={(value: number) => [`${value} ${config.unit}`.trim(), config.label]}
-							/>
-							<Bar dataKey={metric} fill={`url(#${config.gradientId})`} barSize={44} radius={[4, 4, 0, 0]} />
-						</BarChart>
-					</ResponsiveContainer>
+			{isLoading && (
+				<div className={`flex h-[300px] items-center justify-center text-xs ${isDark ? 'text-gray-600' : 'text-gray-400'}`}>
+					Loading…
 				</div>
-			</div>
+			)}
+
+			{(error || (!isLoading && cities.length === 0)) && (
+				<div className={`flex h-[300px] items-center justify-center text-xs ${isDark ? 'text-gray-600' : 'text-gray-400'}`}>
+					No data available
+				</div>
+			)}
+
+			{!isLoading && !error && cities.length > 0 && (
+				<div className="w-full overflow-x-auto no-scrollbar">
+					<div style={{ minWidth: `${minChartWidth}px`, height: '300px' }}>
+						<ResponsiveContainer width="100%" height="100%">
+							<BarChart data={cities} margin={{ top: 8, right: 12, left: -16, bottom: 4 }} barCategoryGap="18%" barGap={2}>
+								<defs>
+									<linearGradient id={config.gradientId} x1="0" y1="0" x2="0" y2="1">
+										<stop offset="0%" stopColor={config.top} stopOpacity={0.95} />
+										<stop offset="60%" stopColor={config.bottom} stopOpacity={0.8} />
+										<stop offset="100%" stopColor={config.bottom} stopOpacity={0.35} />
+									</linearGradient>
+								</defs>
+
+								<CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#334155' : '#cbd5e1'} strokeOpacity={0.2} vertical={false} />
+								<XAxis
+									dataKey="city"
+									tick={{ fill: isDark ? '#94a3b8' : '#64748b', fontSize: 11, fontWeight: 700 }}
+									axisLine={{ stroke: isDark ? '#334155' : '#cbd5e1' }}
+									tickLine={false}
+								/>
+								<YAxis
+									tick={{ fill: isDark ? '#94a3b8' : '#64748b', fontSize: 11 }}
+									axisLine={{ stroke: isDark ? '#334155' : '#cbd5e1' }}
+									tickLine={false}
+								/>
+								<Tooltip
+									cursor={{ fill: isDark ? '#1f2937' : '#e2e8f0', opacity: 0.35 }}
+									contentStyle={{
+										backgroundColor: isDark ? '#0f1115' : '#ffffff',
+										border: `1px solid ${isDark ? '#2a2a2a' : '#e2e8f0'}`,
+										borderRadius: '8px',
+										color: isDark ? '#e5e7eb' : '#0f172a',
+										fontSize: '11px',
+									}}
+									formatter={(value: number) => [`${value} ${config.unit}`.trim(), config.label]}
+								/>
+								<Bar dataKey={metric} fill={`url(#${config.gradientId})`} barSize={44} radius={[4, 4, 0, 0]} />
+							</BarChart>
+						</ResponsiveContainer>
+					</div>
+				</div>
+			)}
 		</section>
 	);
 }
-

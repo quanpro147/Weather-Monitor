@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Weather Monitor — System Workflow</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      padding: 40px 24px 80px;
+    }
+
+    .page-header {
+      text-align: center;
+      margin-bottom: 56px;
+    }
+    .page-header h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #60a5fa;
+      letter-spacing: -0.5px;
+    }
+    .page-header p {
+      margin-top: 8px;
+      color: #94a3b8;
+      font-size: 0.95rem;
+    }
+    .badge-row {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 16px;
+    }
+    .badge {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 20px;
+      padding: 4px 14px;
+      font-size: 0.78rem;
+      color: #94a3b8;
+    }
+    .badge span { color: #60a5fa; }
+
+    .section {
+      max-width: 1100px;
+      margin: 0 auto 60px;
+    }
+    .section-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #1e293b;
+    }
+    .section-num {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #2563eb;
+      color: #fff;
+      font-size: 0.8rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .section-title h2 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      color: #e2e8f0;
+    }
+    .section-title .sub {
+      font-size: 0.82rem;
+      color: #64748b;
+      margin-left: 4px;
+    }
+
+    .diagram-card {
+      background: #1a1f2e;
+      border: 1px solid #1e293b;
+      border-radius: 12px;
+      padding: 32px 24px;
+      overflow-x: auto;
+    }
+    .diagram-card .mermaid {
+      display: flex;
+      justify-content: center;
+    }
+
+    /* Legend */
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      margin-top: 16px;
+      padding: 14px 18px;
+      background: #111827;
+      border-radius: 8px;
+      border: 1px solid #1e293b;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.8rem;
+      color: #94a3b8;
+    }
+    .legend-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+
+    /* Stack table */
+    .stack-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+      margin-top: 0;
+    }
+    .stack-table th {
+      background: #1e293b;
+      color: #94a3b8;
+      padding: 10px 16px;
+      text-align: left;
+      font-weight: 500;
+    }
+    .stack-table td {
+      padding: 10px 16px;
+      border-bottom: 1px solid #1e293b;
+      color: #cbd5e1;
+    }
+    .stack-table tr:last-child td { border-bottom: none; }
+    .stack-table tr:hover td { background: #1e293b33; }
+    .tag {
+      display: inline-block;
+      background: #172554;
+      color: #93c5fd;
+      border-radius: 4px;
+      padding: 2px 8px;
+      font-size: 0.76rem;
+    }
+    .tag.green  { background: #052e16; color: #86efac; }
+    .tag.yellow { background: #1c1917; color: #fcd34d; }
+    .tag.red    { background: #2d0a0a; color: #fca5a5; }
+
+    footer {
+      text-align: center;
+      color: #334155;
+      font-size: 0.8rem;
+      margin-top: 40px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="page-header">
+    <h1>Weather Monitor — System Workflow</h1>
+    <p>Nền tảng giám sát thời tiết & phát hiện bất thường các tỉnh thành Việt Nam</p>
+    <div class="badge-row">
+      <div class="badge"><span>Frontend</span> Next.js 14</div>
+      <div class="badge"><span>Backend</span> FastAPI</div>
+      <div class="badge"><span>Database</span> Supabase / PostgreSQL</div>
+      <div class="badge"><span>Cache</span> Redis</div>
+      <div class="badge"><span>ML</span> Isolation Forest</div>
+      <div class="badge"><span>Data</span> Open-Meteo API</div>
+      <div class="badge"><span>Infra</span> Docker Compose</div>
+    </div>
+  </div>
+
+  <!-- ① System Architecture -->
+  <div class="section">
+    <div class="section-title">
+      <div class="section-num">1</div>
+      <h2>System Architecture <span class="sub">— Tổng quan kiến trúc hệ thống</span></h2>
+    </div>
+    <div class="diagram-card">
+      <div class="mermaid">
+graph TB
+    CSV[("📄 VietNam.csv\n63 tỉnh thành")]
+    OM["🌐 Open-Meteo\nArchive API\nfree · no key"]
+
+    subgraph DOCKER ["🐳  Docker Compose"]
+      direction TB
+      subgraph PIPELINE ["  Data Pipeline"]
+        COL["⚙️ Collect_RealTime.py\nSchedule: 02:00 daily"]
+      end
+      subgraph APIBOX ["  FastAPI :8000"]
+        API["🔌 Routers\ncities · weather · anomaly"]
+        ML["🤖 Isolation Forest\ncontamination=0.05"]
+        API --- ML
+      end
+      subgraph REDIS ["  Redis"]
+        RD[("💾 Redis Cache\nTTL 1h – 24h")]
+      end
+    end
+
+    subgraph CLOUD ["☁️  Supabase Cloud"]
+      SB[("🗄️ PostgreSQL\ncities\nweather_daily")]
+    end
+
+    subgraph FE ["💻  Local Dev"]
+      WEB["🖥️ Next.js :3000\n(Placeholder)"]
+    end
+
+    CSV --> COL
+    OM -->|HTTP GET daily| COL
+    COL -->|psycopg2 INSERT| SB
+    SB -->|supabase-py| API
+    API <-->|GET / SETEX| RD
+    API -->|REST JSON| WEB
+
+    style DOCKER fill:#0f172a,stroke:#1e3a5f,color:#93c5fd
+    style CLOUD fill:#0c1a0c,stroke:#166534,color:#86efac
+    style FE fill:#1c1917,stroke:#44403c,color:#fcd34d
+      </div>
+    </div>
+  </div>
+
+  <!-- ② Data Collection Pipeline -->
+  <div class="section">
+    <div class="section-title">
+      <div class="section-num">2</div>
+      <h2>Data Collection Pipeline <span class="sub">— Luồng thu thập dữ liệu</span></h2>
+    </div>
+    <div class="diagram-card">
+      <div class="mermaid">
+flowchart TD
+    START(["▶ Start\n02:00 daily"])
+    READ["📄 Đọc VietNam.csv\n63 tỉnh thành"]
+    UPSERT["📤 Upsert bảng cities\nON CONFLICT DO NOTHING"]
+    LOOP{"🔁 Còn tỉnh\nchưa xử lý?"}
+    DONE(["✅ Done — chờ ngày tiếp theo"])
+
+    QDATE["🔍 Query ngày mới nhất\ntrong weather_daily"]
+    HASDATA{"Đã có\ndữ liệu?"}
+    SETSTART1["📅 start = 2024-01-01\n(lần đầu tiên)"]
+    SETSTART2["📅 start = last_date + 1"]
+
+    CALL["🌐 Gọi Open-Meteo API\nHTTP GET /v1/archive"]
+    RATE{"HTTP 429\nRate Limit?"}
+    S60["⏱️ Sleep 60s\nminutely > 9000"]
+    S3600["⏱️ Sleep 3600s\nhourly > 9000"]
+
+    PARSE["🔧 Parse JSON\ndaily arrays → records"]
+    INSERT["💾 INSERT INTO weather_daily\nON CONFLICT DO NOTHING"]
+
+    START --> READ --> UPSERT --> LOOP
+    LOOP -- Không --> DONE
+    LOOP -- Có --> QDATE --> HASDATA
+    HASDATA -- Chưa --> SETSTART1 --> CALL
+    HASDATA -- Rồi --> SETSTART2 --> CALL
+    CALL --> RATE
+    RATE -- minutely > 9000 --> S60 --> CALL
+    RATE -- hourly > 9000 --> S3600 --> CALL
+    RATE -- OK --> PARSE --> INSERT --> LOOP
+
+    style START fill:#1d4ed8,color:#fff,stroke:none
+    style DONE fill:#15803d,color:#fff,stroke:none
+    style S60 fill:#854d0e,color:#fff,stroke:none
+    style S3600 fill:#7f1d1d,color:#fff,stroke:none
+      </div>
+    </div>
+  </div>
+
+  <!-- ③ API Request Flow -->
+  <div class="section">
+    <div class="section-title">
+      <div class="section-num">3</div>
+      <h2>API Request Flow <span class="sub">— Luồng xử lý request với Redis Cache</span></h2>
+    </div>
+    <div class="diagram-card">
+      <div class="mermaid">
+sequenceDiagram
+    actor FE as 🖥️ Frontend
+    participant API as ⚙️ FastAPI :8000
+    participant RD as 💾 Redis
+    participant SB as 🗄️ Supabase
+    participant ML as 🤖 Isolation Forest
+
+    FE->>API: GET /anomaly/{city_id}?start=&end=
+    API->>RD: GET anomaly:{city_id}:{start}:{end}
+
+    alt ✅ Cache HIT
+        RD-->>API: JSON (cached)
+        API-->>FE: 200 ApiResponse { data }
+    else ❌ Cache MISS
+        RD-->>API: nil
+        API->>SB: SELECT * FROM weather_daily WHERE city_id = ?
+        SB-->>API: Toàn bộ lịch sử (all dates)
+        API->>ML: detect_anomalies(all_records)
+        Note over ML: 1. fillna(median)<br/>2. StandardScaler<br/>3. IsolationForest.fit(contamination=0.05)<br/>4. predict() → -1 / +1<br/>5. anomaly_score = -decision_function()
+        ML-->>API: records + anomaly_score + is_anomaly
+        API->>API: Filter → requested date range
+        API->>RD: SETEX anomaly:... TTL=21600s (6h)
+        API-->>FE: 200 ApiResponse { data }
+    end
+
+    Note over FE,API: Các endpoint khác (tương tự pattern cache)
+    FE->>API: GET /weather/{city_id}/current
+    API->>RD: GET weather:{city_id}:current
+    Note right of RD: TTL = 21600s (6h)
+    RD-->>API: hit/miss
+    API->>SB: (nếu miss) SELECT * ... LIMIT 1
+    API-->>FE: 200 ApiResponse { data }
+
+    FE->>API: GET /weather/{city_id}/advisory
+    API->>RD: GET advisory:{city_id}
+    Note right of RD: TTL = 3600s (1h)
+    RD-->>API: hit/miss
+    API->>SB: (nếu miss) latest record
+    Note over API: Rule-based logic:<br/>temp≥38°C → high risk<br/>rain≥50mm → high risk<br/>wind≥60km/h → medium
+    API-->>FE: 200 ApiResponse { advice, risk_level }
+      </div>
+    </div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#15803d"></div> Cache HIT → không query DB, trả về ngay</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#b45309"></div> Cache MISS → query Supabase + chạy ML, rồi cache kết quả</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#1d4ed8"></div> /anomaly TTL 6h · /weather TTL 6h · /advisory TTL 1h · /cities TTL 24h</div>
+    </div>
+  </div>
+
+  <!-- ④ ML Anomaly Detection -->
+  <div class="section">
+    <div class="section-title">
+      <div class="section-num">4</div>
+      <h2>ML — Anomaly Detection <span class="sub">— Isolation Forest Pipeline</span></h2>
+    </div>
+    <div class="diagram-card">
+      <div class="mermaid">
+flowchart TD
+    IN(["📥 Input\nrecords từ Supabase\n(toàn bộ lịch sử city)"])
+    CHECK{"len(records)\n>= 30?"}
+    EMPTY(["⚠️ Return []\nInsufficient data"])
+    DF["🐼 Chuyển thành DataFrame\nchọn 7 features"]
+
+    FEAT["Features:\ntemp_max · temp_min · temp_mean\nrain_sum · wind_speed_max\nhumidity_mean · cloud_cover_mean"]
+
+    FILLNA["🔧 Điền null bằng median\ndf.fillna(df.median())"]
+    SCALE["📐 StandardScaler\nchuẩn hóa về mean=0, std=1"]
+    FIT["🌲 IsolationForest.fit(X)\nn_estimators=100\ncontamination=0.05"]
+    PRED["🔮 predict(X)\n-1 = anomaly\n+1 = normal"]
+    SCORE["📊 anomaly_score =\n-decision_function(X)\n(cao hơn = bất thường hơn)"]
+    ANNOTATE["🏷️ Gán từng record:\nis_anomaly: True/False\nanomaly_score: float"]
+    OUT(["📤 Return annotated records\n~5% marked is_anomaly=True"])
+
+    IN --> CHECK
+    CHECK -- Không --> EMPTY
+    CHECK -- Có --> DF
+    DF --> FEAT
+    FEAT --> FILLNA --> SCALE --> FIT --> PRED --> SCORE --> ANNOTATE --> OUT
+
+    style IN fill:#1d4ed8,color:#fff,stroke:none
+    style EMPTY fill:#7f1d1d,color:#fca5a5,stroke:none
+    style OUT fill:#14532d,color:#86efac,stroke:none
+    style FIT fill:#312e81,color:#c4b5fd,stroke:none
+      </div>
+    </div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#312e81"></div> Model re-train mỗi request — không lưu file model (cần review: tasks.md #1.1)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#854d0e"></div> contamination=0.05 → ~5% data được dự đoán là bất thường</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#155e75"></div> Dùng TOÀN BỘ lịch sử city để train → ngưỡng bất thường được calibrate đúng</div>
+    </div>
+  </div>
+
+  <!-- ⑤ Cache Keys Reference -->
+  <div class="section">
+    <div class="section-title">
+      <div class="section-num">5</div>
+      <h2>Redis Cache Keys Reference</h2>
+    </div>
+    <div class="diagram-card" style="padding:0;overflow:hidden">
+      <table class="stack-table">
+        <thead>
+          <tr>
+            <th>Endpoint</th>
+            <th>Cache Key</th>
+            <th>TTL</th>
+            <th>Lý do</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>GET /cities/</code></td>
+            <td><code>cities_list</code></td>
+            <td><span class="tag green">24h</span></td>
+            <td>Dữ liệu thành phố gần như không đổi</td>
+          </tr>
+          <tr>
+            <td><code>GET /weather/{id}/current</code></td>
+            <td><code>weather:{id}:current</code></td>
+            <td><span class="tag">6h</span></td>
+            <td>Dữ liệu ngày mới nhất cập nhật 1 lần/ngày</td>
+          </tr>
+          <tr>
+            <td><code>GET /weather/{id}/history</code></td>
+            <td><code>weather:{id}:history:{start}:{end}</code></td>
+            <td><span class="tag">6h</span></td>
+            <td>Dữ liệu lịch sử ổn định</td>
+          </tr>
+          <tr>
+            <td><code>GET /weather/{id}/stats</code></td>
+            <td><code>stats:{id}:{YYYY-MM}</code></td>
+            <td><span class="tag">6h</span></td>
+            <td>Thống kê tháng không thay đổi trong ngày</td>
+          </tr>
+          <tr>
+            <td><code>GET /weather/{id}/advisory</code></td>
+            <td><code>advisory:{id}</code></td>
+            <td><span class="tag yellow">1h</span></td>
+            <td>Advisory dựa trên dữ liệu mới nhất</td>
+          </tr>
+          <tr>
+            <td><code>GET /weather/compare</code></td>
+            <td><code>compare:{id1,id2,...}</code></td>
+            <td><span class="tag">6h</span></td>
+            <td>So sánh nhiều thành phố</td>
+          </tr>
+          <tr>
+            <td><code>GET /weather/extremes</code></td>
+            <td><code>extremes:{type}:{start}:{end}</code></td>
+            <td><span class="tag">6h</span></td>
+            <td>Tìm thành phố nóng/mưa nhất</td>
+          </tr>
+          <tr>
+            <td><code>GET /anomaly/{id}</code></td>
+            <td><code>anomaly:{id}:{start}:{end}</code></td>
+            <td><span class="tag yellow">6h</span></td>
+            <td>ML inference tốn kém — cache 6h</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ⑥ Tech Stack -->
+  <div class="section">
+    <div class="section-title">
+      <div class="section-num">6</div>
+      <h2>Tech Stack & ML Feature Status</h2>
+    </div>
+    <div class="diagram-card" style="padding:0;overflow:hidden">
+      <table class="stack-table">
+        <thead>
+          <tr><th>Layer</th><th>Technology</th><th>Trạng thái</th><th>Ghi chú</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Frontend</td><td>Next.js 14 + TypeScript + Tailwind</td><td><span class="tag red">Placeholder</span></td><td>Chỉ render &lt;main&gt;Weather Monitor&lt;/main&gt;</td></tr>
+          <tr><td>Backend API</td><td>FastAPI + Pydantic</td><td><span class="tag green">Hoạt động</span></td><td>6 nhóm endpoint</td></tr>
+          <tr><td>Data Pipeline</td><td>Python + psycopg2 + schedule</td><td><span class="tag green">Hoạt động</span></td><td>Thu thập daily từ Open-Meteo</td></tr>
+          <tr><td>Database</td><td>Supabase (PostgreSQL)</td><td><span class="tag green">Hoạt động</span></td><td>2 bảng: cities, weather_daily</td></tr>
+          <tr><td>Cache</td><td>Redis 7</td><td><span class="tag green">Hoạt động</span></td><td>TTL 1h–24h tùy endpoint</td></tr>
+          <tr><td>Anomaly Detection</td><td>Isolation Forest (scikit-learn)</td><td><span class="tag yellow">Draft — cần review</span></td><td>Re-train mỗi request, cần optimize</td></tr>
+          <tr><td>Rule Advisory</td><td>Hardcoded thresholds (Python)</td><td><span class="tag yellow">Draft — cần review</span></td><td>Ngưỡng cần calibrate</td></tr>
+          <tr><td>LLM Summary</td><td>Gemini / OpenAI</td><td><span class="tag red">Chưa triển khai</span></td><td>Ưu tiên 2.1</td></tr>
+          <tr><td>Forecast</td><td>numpy polyfit</td><td><span class="tag red">Chưa triển khai</span></td><td>Ưu tiên 2.2</td></tr>
+          <tr><td>Infra</td><td>Docker Compose</td><td><span class="tag green">Hoạt động</span></td><td>3 services: redis, api, pipeline</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <footer>
+    Weather Monitor · Phan Ngọc Quân · 2026 · Generated with Claude Code
+  </footer>
+
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'dark',
+      themeVariables: {
+        primaryColor: '#1e3a5f',
+        primaryTextColor: '#e2e8f0',
+        primaryBorderColor: '#2563eb',
+        lineColor: '#475569',
+        secondaryColor: '#0f172a',
+        tertiaryColor: '#1a1f2e',
+        background: '#1a1f2e',
+        mainBkg: '#1e293b',
+        nodeBorder: '#334155',
+        clusterBkg: '#0f172a',
+        titleColor: '#93c5fd',
+        edgeLabelBackground: '#1e293b',
+        actorBkg: '#1e293b',
+        actorBorder: '#2563eb',
+        actorTextColor: '#e2e8f0',
+        actorLineColor: '#475569',
+        signalColor: '#60a5fa',
+        signalTextColor: '#e2e8f0',
+        labelBoxBkgColor: '#1e293b',
+        labelBoxBorderColor: '#334155',
+        labelTextColor: '#e2e8f0',
+        loopTextColor: '#94a3b8',
+        noteBorderColor: '#334155',
+        noteBkgColor: '#1e293b',
+        noteTextColor: '#94a3b8',
+        activationBorderColor: '#2563eb',
+        activationBkgColor: '#1e3a5f',
+        sequenceNumberColor: '#fff',
+        fontFamily: 'Segoe UI, system-ui, sans-serif',
+        fontSize: '14px',
+      },
+      flowchart: { curve: 'basis', padding: 20 },
+      sequence: { actorMargin: 60, width: 160, height: 50, boxMargin: 10, useMaxWidth: true },
+    });
+  </script>
+</body>
+</html>

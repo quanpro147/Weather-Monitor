@@ -4,11 +4,7 @@ import os
 from services.api.app.routers import summary
 from services.api.app.routers import forecast
 from services.api.app.core.config import settings
-from services.api.app.routers import anomaly, cities, weather
-# NOTE (analytics):
-# After implementing services/api/app/routers/analytics.py router object,
-# import and include it here:
-# from services.api.app.routers import analytics
+from services.api.app.routers import anomaly, analytics, cities, weather
 
 app = FastAPI(title="Weather Monitor API")
 
@@ -38,7 +34,7 @@ app.include_router(weather.router)
 app.include_router(anomaly.router)
 app.include_router(summary.router)
 app.include_router(forecast.router)
-# app.include_router(analytics.router)
+app.include_router(analytics.router)
 
 @app.get("/health")
 def health_check() -> dict[str, str]:

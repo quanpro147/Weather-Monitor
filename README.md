@@ -116,7 +116,7 @@ API docs tại: [http://localhost:8000/docs](http://localhost:8000/docs)
 **Frontend demo/test** (`apps/test_web` — port 3001):
 
 ```bash
-cd apps/test_web
+cd apps/web
 npm install
 ```
 

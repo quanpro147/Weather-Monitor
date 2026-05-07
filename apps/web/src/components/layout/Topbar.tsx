@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { useGlobalFilter, type DateRangePreset } from '../../hooks/useGlobalFilter';
+import { useGlobalFilter, type DateRangePreset, type ScopeMode } from '../../hooks/useGlobalFilter';
 import { useTheme } from '../../contexts/ThemeContext';
 import { listCities } from '../../services/city.service';
 import type { City } from '../../types/city';
 
 export default function Topbar() {
     const { isDark, toggleTheme } = useTheme();
-    const { cityId, setCityId, dateRangePreset, setDateRangePreset } = useGlobalFilter();
+    const { cityId, setCityId, scopeMode, setScopeMode, dateRangePreset, setDateRangePreset } = useGlobalFilter();
     const [cities, setCities] = useState<City[]>([]);
     const [loadingCities, setLoadingCities] = useState(false);
     
@@ -27,11 +27,22 @@ export default function Topbar() {
         const fetchCities = async () => {
             setLoadingCities(true);
             try {
-                const data = await listCities();
+                let data: City[];
+
+                if (scopeMode === 'vietnam') {
+                    const vnByCanonical = await listCities({ country: 'Viet Nam' });
+                    data = vnByCanonical.length > 0 ? vnByCanonical : await listCities({ country: 'Vietnam' });
+                } else {
+                    data = await listCities();
+                }
+
                 if (!active) return;
+
                 setCities(data);
-                if (cityId === null && data.length > 0) {
-                    setCityId(data[0].city_id);
+
+                const hasSelectedCity = cityId !== null && data.some((item) => item.city_id === cityId);
+                if (!hasSelectedCity) {
+                    setCityId(data.length > 0 ? data[0].city_id : null);
                 }
             } catch {
                 if (!active) return;
@@ -48,7 +59,7 @@ export default function Topbar() {
         return () => {
             active = false;
         };
-    }, [cityId, setCityId]);
+    }, [cityId, scopeMode, setCityId]);
 
     // Format giờ: HH:mm:ss
     const formatTime = (date: Date) => {
@@ -87,6 +98,18 @@ export default function Topbar() {
 
                 {/* Filters */}
                 <label className="hidden md:flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-[#8b949e]">
+                    Mode
+                    <select
+                        value={scopeMode}
+                        onChange={(e) => setScopeMode(e.target.value as ScopeMode)}
+                        className="rounded-md border border-gray-200 dark:border-[#2a2d33] bg-gray-50 dark:bg-[#1a1d21] px-2 py-1 text-xs font-bold text-gray-900 dark:text-[#e5e7eb] outline-none focus:ring-1 focus:ring-cyan-500 transition-colors cursor-pointer"
+                    >
+                        <option value="vietnam">Viet Nam</option>
+                        <option value="global">Global</option>
+                    </select>
+                </label>
+
+                <label className="hidden md:flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-[#8b949e]">
                     Date
                     <select
                         value={dateRangePreset}
@@ -109,6 +132,8 @@ export default function Topbar() {
                     >
                         {loadingCities ? (
                             <option value="">Loading...</option>
+                        ) : cities.length === 0 ? (
+                            <option value="">No cities</option>
                         ) : (
                             cities.map((item) => (
                                 <option key={item.city_id} value={item.city_id}>

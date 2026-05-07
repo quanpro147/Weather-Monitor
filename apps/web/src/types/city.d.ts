@@ -10,6 +10,11 @@ export interface City {
 
 export interface ListCitiesParams {
 	country?: string;
+	min_lat?: number;
+	max_lat?: number;
+	min_lng?: number;
+	max_lng?: number;
+	limit?: number;
 }
 
 export interface SearchCitiesParams {

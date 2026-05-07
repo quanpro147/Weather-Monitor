@@ -3,6 +3,7 @@ import React, { createContext, useContext, useMemo, useState } from 'react';
 import type { ISODateString } from '../types/common';
 
 export type DateRangePreset = '24h' | '7d' | '30d' | 'custom';
+export type ScopeMode = 'vietnam' | 'global';
 
 interface CustomDateRange {
 	startDate: ISODateString;
@@ -11,10 +12,12 @@ interface CustomDateRange {
 
 interface GlobalFilterContextValue {
 	cityId: number | null;
+	scopeMode: ScopeMode;
 	dateRangePreset: DateRangePreset;
 	startDate: ISODateString;
 	endDate: ISODateString;
 	setCityId: (cityId: number | null) => void;
+	setScopeMode: (mode: ScopeMode) => void;
 	setDateRangePreset: (preset: DateRangePreset) => void;
 	setCustomDateRange: (range: CustomDateRange) => void;
 }
@@ -44,7 +47,8 @@ function resolvePresetRange(preset: DateRangePreset): CustomDateRange {
 const GlobalFilterContext = createContext<GlobalFilterContextValue | undefined>(undefined);
 
 export function GlobalFilterProvider({ children }: { children: React.ReactNode }) {
-	const [cityId, setCityId] = useState<number | null>(1);
+	const [cityId, setCityId] = useState<number | null>(null);
+	const [scopeMode, setScopeMode] = useState<ScopeMode>('vietnam');
 	const [dateRangePreset, setDateRangePreset] = useState<DateRangePreset>('7d');
 	const [customDateRange, setCustomDateRangeState] = useState<CustomDateRange | null>(null);
 
@@ -62,10 +66,12 @@ export function GlobalFilterProvider({ children }: { children: React.ReactNode }
 
 	const value: GlobalFilterContextValue = {
 		cityId,
+		scopeMode,
 		dateRangePreset,
 		startDate: resolvedRange.startDate,
 		endDate: resolvedRange.endDate,
 		setCityId,
+		setScopeMode,
 		setDateRangePreset,
 		setCustomDateRange,
 	};

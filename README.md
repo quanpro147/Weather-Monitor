@@ -113,7 +113,7 @@ API docs tại: [http://localhost:8000/docs](http://localhost:8000/docs)
 
 ### Bước 5: Chạy Frontend
 
-**Frontend demo/test** (`apps/test_web` — port 3001):
+**Frontend** (`apps/web` — port 3000):
 
 ```bash
 cd apps/web
@@ -130,15 +130,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 
 ```bash
 npm run dev
-# Mở http://localhost:3001
-```
-
-**Frontend chính** (`apps/web` — port 3000, khi đã phát triển):
-
-```bash
-cd apps/web
-npm install
-npm run dev
+# Mở http://localhost:3000
 ```
 
 ---

@@ -9,7 +9,8 @@ export default function Topbar() {
     const { cityId, setCityId, scopeMode, setScopeMode, dateRangePreset, setDateRangePreset } = useGlobalFilter();
     const [cities, setCities] = useState<City[]>([]);
     const [loadingCities, setLoadingCities] = useState(false);
-    
+    const [selectedCountry, setSelectedCountry] = useState<string>('');
+
     // State cho đồng hồ Real-time
     const [time, setTime] = useState(new Date());
     const [mounted, setMounted] = useState(false);
@@ -54,12 +55,40 @@ export default function Topbar() {
             }
         };
 
+        if (scopeMode === 'vietnam') {
+            setSelectedCountry('');
+        }
+
         void fetchCities();
 
         return () => {
             active = false;
         };
     }, [cityId, scopeMode, setCityId]);
+
+    const countries = React.useMemo(() => {
+        if (scopeMode !== 'global') return [];
+        const seen = new Set<string>();
+        return cities
+            .map((c) => c.country)
+            .filter((country) => {
+                if (seen.has(country)) return false;
+                seen.add(country);
+                return true;
+            })
+            .sort();
+    }, [cities, scopeMode]);
+
+    const visibleCities = React.useMemo(() => {
+        if (scopeMode !== 'global' || !selectedCountry) return cities;
+        return cities.filter((c) => c.country === selectedCountry);
+    }, [cities, scopeMode, selectedCountry]);
+
+    const handleCountryChange = (country: string) => {
+        setSelectedCountry(country);
+        const first = cities.find((c) => c.country === country);
+        setCityId(first ? first.city_id : null);
+    };
 
     // Format giờ: HH:mm:ss
     const formatTime = (date: Date) => {
@@ -98,7 +127,7 @@ export default function Topbar() {
 
                 {/* Filters */}
                 <label className="hidden md:flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-[#8b949e]">
-                    Mode
+                    Scope
                     <select
                         value={scopeMode}
                         onChange={(e) => setScopeMode(e.target.value as ScopeMode)}
@@ -123,19 +152,35 @@ export default function Topbar() {
                     </select>
                 </label>
 
+                {scopeMode === 'global' && (
+                    <label className="hidden md:flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-[#8b949e]">
+                        Country
+                        <select
+                            value={selectedCountry}
+                            onChange={(e) => handleCountryChange(e.target.value)}
+                            className="w-[110px] rounded-md border border-gray-200 dark:border-[#2a2d33] bg-gray-50 dark:bg-[#1a1d21] px-2 py-1 text-xs font-bold text-gray-900 dark:text-[#e5e7eb] outline-none focus:ring-1 focus:ring-cyan-500 transition-colors cursor-pointer truncate"
+                        >
+                            <option value="">All Countries</option>
+                            {countries.map((c) => (
+                                <option key={c} value={c}>{c}</option>
+                            ))}
+                        </select>
+                    </label>
+                )}
+
                 <label className="hidden md:flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-[#8b949e]">
-                    Scope
+                    City
                     <select
                         value={cityId ?? ''}
                         onChange={(e) => setCityId(e.target.value ? Number(e.target.value) : null)}
-                        className="rounded-md border border-gray-200 dark:border-[#2a2d33] bg-gray-50 dark:bg-[#1a1d21] px-2 py-1 text-xs font-bold text-gray-900 dark:text-[#e5e7eb] outline-none focus:ring-1 focus:ring-cyan-500 transition-colors cursor-pointer"
+                        className="w-[120px] rounded-md border border-gray-200 dark:border-[#2a2d33] bg-gray-50 dark:bg-[#1a1d21] px-2 py-1 text-xs font-bold text-gray-900 dark:text-[#e5e7eb] outline-none focus:ring-1 focus:ring-cyan-500 transition-colors cursor-pointer truncate"
                     >
                         {loadingCities ? (
                             <option value="">Loading...</option>
-                        ) : cities.length === 0 ? (
+                        ) : visibleCities.length === 0 ? (
                             <option value="">No cities</option>
                         ) : (
-                            cities.map((item) => (
+                            visibleCities.map((item) => (
                                 <option key={item.city_id} value={item.city_id}>
                                     {item.city}
                                 </option>

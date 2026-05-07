@@ -122,7 +122,7 @@ export default function InsightsView() {
 
             {cityId === null && (
                 <div className={`rounded-xl border p-3 text-sm ${isDark ? 'border-[#2a2d33] text-gray-300 bg-[#1e1e1e]' : 'border-gray-200 text-gray-700 bg-white'}`}>
-                    Chon thanh pho tu bo loc tren cung de xem AI insight va anomaly diagnostics.
+                    Chọn thành phố từ bộ lọc trên cùng để xem AI Insight và Anomaly Diagnostics.
                 </div>
             )}
 

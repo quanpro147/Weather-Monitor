@@ -9,8 +9,8 @@ export default function Sidebar() {
         { label: 'Interactive Map', icon: 'fa-map-location-dot', path: '/map', enabled: true },
         { label: 'Data Analytics (EDA)', icon: 'fa-chart-line', path: '/analytics', enabled: true },
         { label: 'AI Insights & Alerts', icon: 'fa-bolt', path: '/insights', enabled: true },
-        { label: 'Station Management', icon: 'fa-satellite-dish', path: '/stations', enabled: false },
-        { label: 'System Settings', icon: 'fa-gear', path: '/settings', enabled: false },
+        { label: 'Station Management', icon: 'fa-satellite-dish', path: '/stations', enabled: true },
+        { label: 'System Settings', icon: 'fa-gear', path: '/settings', enabled: true },
     ];
 
     const isActive = (path: string) => router.pathname === path;

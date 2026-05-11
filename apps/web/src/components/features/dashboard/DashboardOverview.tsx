@@ -291,7 +291,7 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
     const aqi = realtime?.air_quality_index ?? realtime?.aqi ?? null;
 
     // Chuẩn bị dữ liệu cho Chart: Hợp nhất Lịch sử + Bất thường + Dự báo
-    const historyData = history.slice(-7).map((item) => {
+    const historyData = history.map((item) => {
         const itemRealtime = item as WeatherWithOptionalRealtime;
         const tempActual = itemRealtime.temperature ?? item.temperature_2m_max ?? item.temperature_2m_mean ?? 0;
         
@@ -308,14 +308,17 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
         };
     });
 
-    const forecastData = forecastList.map((f) => ({
-        time: f.date.slice(5),
-        tempActual: null,
-        anomalyTemp: null,
-        tempForecast: f.predicted_temperature, // Giá trị dự báo tương lai
-        rainfall: 0,
-        aqi: null,
-    }));
+    const lastHistoryDate = history.length > 0 ? history[history.length - 1].date : null;
+    const forecastData = forecastList
+        .filter((f) => !lastHistoryDate || f.date > lastHistoryDate)
+        .map((f) => ({
+            time: f.date.slice(5),
+            tempActual: null,
+            anomalyTemp: null,
+            tempForecast: f.predicted_temperature,
+            rainfall: 0,
+            aqi: null,
+        }));
 
     // Gắn mép: Nối điểm cuối của lịch sử với điểm đầu của dự báo để đường không bị đứt quãng
     if (historyData.length > 0 && forecastData.length > 0) {
@@ -347,7 +350,7 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
                 <article className="bg-white dark:bg-[#1e1e1e] border border-gray-200 dark:border-[#2a2a2a] rounded-2xl p-5 xl:col-span-5 flex flex-col justify-between transition-colors shadow-sm">
                     <div className="flex items-start justify-between">
                         <div>
-                            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400 dark:text-[#6b7280] mb-1">Main Weather</p>
+                            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400 dark:text-[#6b7280] mb-1">Today&apos;s Conditions</p>
                             <h3 className="text-6xl font-black tracking-tighter text-gray-900 dark:text-[#f3f4f6] leading-none">
                                 {formatNumber(mainTemp)}°C
                             </h3>
@@ -484,8 +487,8 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
                 {/* Multi-variable Analytics Chart */}
                 <article className="bg-white dark:bg-[#1e1e1e] border border-gray-200 dark:border-[#2a2a2a] rounded-2xl p-5 xl:col-span-7 shadow-sm flex flex-col min-w-0">
                     <div className="mb-3 flex items-center justify-between">
-                        <h3 className="text-xs font-black text-gray-900 dark:text-[#f3f4f6] uppercase tracking-wider">Multi-variable Analytics</h3>
-                        <span className="text-[9px] font-bold text-gray-400 uppercase">Dual Y-axis Overlay</span>
+                        <h3 className="text-xs font-black text-gray-900 dark:text-[#f3f4f6] uppercase tracking-wider">Temp · Rain · 7-Day Forecast</h3>
+                        <span className="text-[9px] font-bold text-gray-400 uppercase">History + Forecast Trend</span>
                     </div>
 
                     <div className="flex-1 min-h-[300px] w-full min-w-0">
@@ -499,7 +502,7 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
                                     </linearGradient>
                                 </defs>
                                 <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#2d3238" : "#e2e8f0"} vertical={false} />
-                                <XAxis dataKey="time" tick={{ fill: '#64748b', fontSize: 10, fontWeight: 'bold' }} axisLine={false} tickLine={false} />
+                                <XAxis dataKey="time" tick={{ fill: '#64748b', fontSize: 10, fontWeight: 'bold' }} axisLine={false} tickLine={false} interval={Math.max(0, Math.ceil(trendData.length / 8) - 1)} />
                                 <YAxis yAxisId="left" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} />
                                 <YAxis yAxisId="right" orientation="right" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} />
                                 

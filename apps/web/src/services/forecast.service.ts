@@ -3,6 +3,9 @@ import { api, requireSuccessData } from './api';
 export interface ForecastPoint {
 	date: string;
 	predicted_temperature: number;
+	confidence_lower: number;
+	confidence_upper: number;
+	method: string;
 }
 
 interface ForecastPayload {

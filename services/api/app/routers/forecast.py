@@ -49,21 +49,25 @@ def get_forecast(
 
     db = get_supabase()
 
-    # 2. Lấy dữ liệu lịch sử để nạp vào mô hình Numpy
+    # 2. Lấy 90 bản ghi gần nhất để đảm bảo last_date luôn là ngày hiện tại
     weather_res = _execute_with_retry(
         db.table("weather_daily")
         .select("date, temperature_2m_mean")
         .eq("city_id", city_id)
-        .order("date")
+        .order("date", desc=True)
+        .limit(90)
     )
 
     if not weather_res.data or len(weather_res.data) < 30:
         raise HTTPException(
-            status_code=400, 
+            status_code=400,
             detail="Không đủ dữ liệu lịch sử để chạy mô hình dự báo (yêu cầu >= 30 ngày)"
         )
 
-    # 3. Chạy hàm dự báo
+    # 3. Sắp xếp lại theo thứ tự tăng dần (model cần ascending order)
+    weather_res.data.sort(key=lambda r: r["date"])
+
+    # 4. Chạy hàm dự báo
     predictions = forecast_temperature(weather_res.data, days_ahead=days)
 
     if not predictions:

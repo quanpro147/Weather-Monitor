@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException
 from services.api.app.core.cache import get_redis
 from services.api.app.core.database import get_supabase
 from services.api.app.ml.anomaly import detect_anomalies
+from services.api.app.ml.forecast import compute_trend_summary
 from services.api.app.ml.summary import generate_weather_summary
 from services.api.app.models.summary import SummaryResponse
 from services.api.app.models.common import ApiResponse
@@ -75,14 +76,32 @@ def get_summary(city_id: int):
     recent_7_days = [r for r in annotated_records if datetime.date.fromisoformat(r["date"]) >= start_7_days]
     recent_anomalies = [r for r in recent_7_days if r.get("is_anomaly")]
 
-    # 5. Gọi AI sinh tóm tắt
-    summary_text = generate_weather_summary(city_name, recent_7_days, recent_anomalies)
+    # 5. Tính trend (cần cho cả hai nhánh thành công và lỗi)
+    trend = compute_trend_summary(weather_res.data)
 
-    # 6. Chuẩn bị response và lưu Cache
+    # 6. Gọi AI sinh tóm tắt — truyền đủ 30 ngày để stats chính xác
+    try:
+        summary_text = generate_weather_summary(city_name, weather_res.data, recent_anomalies)
+    except Exception as exc:
+        print(f"[summary] Gemini call failed for city_id={city_id}: {exc}")
+        fallback = SummaryResponse(
+            city_name=city_name,
+            summary_text="Unable to generate an AI summary at this time. Please refer to the detailed charts.",
+            provider="Gemini 2.5 Flash",
+            period_days=len(weather_res.data),
+            anomaly_count=len(recent_anomalies),
+            trend_direction=trend.get("direction", "stable"),
+        )
+        return ApiResponse(success=True, data=fallback)
+
+    # 7. Chuẩn bị response và lưu Cache (chỉ cache khi AI thành công)
     response_data = SummaryResponse(
         city_name=city_name,
         summary_text=summary_text,
-        provider="Gemini 2.5 Flash"
+        provider="Gemini 2.5 Flash",
+        period_days=len(weather_res.data),
+        anomaly_count=len(recent_anomalies),
+        trend_direction=trend.get("direction", "stable"),
     )
 
     cache.setex(

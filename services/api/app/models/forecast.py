@@ -1,10 +1,14 @@
 import datetime
 from pydantic import BaseModel
 
+
 class ForecastPoint(BaseModel):
-    """Điểm dữ liệu dự báo nhiệt độ trong tương lai"""
     date: datetime.date
     predicted_temperature: float
+    confidence_lower: float = 0.0
+    confidence_upper: float = 0.0
+    method: str = "holt"
+
 
 class ForecastResponse(BaseModel):
     city_id: int

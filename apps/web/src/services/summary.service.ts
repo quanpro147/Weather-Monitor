@@ -1,9 +1,12 @@
 import { api, requireSuccessData } from './api';
 
-interface SummaryPayload {
+export interface SummaryPayload {
 	city_name: string;
 	summary_text: string;
 	provider: string;
+	period_days: number;
+	anomaly_count: number;
+	trend_direction: 'warming' | 'cooling' | 'stable';
 }
 
 type SummaryApiResponse = {

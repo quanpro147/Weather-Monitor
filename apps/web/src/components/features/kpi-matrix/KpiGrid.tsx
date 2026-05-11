@@ -29,37 +29,30 @@ function aqiRiskText(aqi: number | null | undefined): string {
 	if (aqi === null || aqi === undefined) {
 		return 'Unavailable';
 	}
-	if (aqi <= 50) {
-		return 'Good';
-	}
-	if (aqi <= 100) {
-		return 'Moderate';
-	}
-	if (aqi <= 150) {
-		return 'Sensitive group risk';
-	}
-	if (aqi <= 200) {
-		return 'Unhealthy';
-	}
+	if (aqi <= 50) return 'Good';
+	if (aqi <= 100) return 'Moderate';
+	if (aqi <= 150) return 'Sensitive group risk';
+	if (aqi <= 200) return 'Unhealthy';
 	return 'Very unhealthy';
 }
 
 function resolveTempDelta(history: WeatherDaily[], current: WeatherDaily | null): string {
-	if (!current) {
-		return 'No baseline';
-	}
+	if (!current) return 'No baseline';
 
 	const previousDay = history.length > 1 ? history[history.length - 2] : null;
 	const currentTemp = current.temperature_2m_max;
 	const previousTemp = previousDay?.temperature_2m_max;
 
-	if (currentTemp === null || currentTemp === undefined || previousTemp === null || previousTemp === undefined) {
-		return 'No baseline';
-	}
+	if (currentTemp == null || previousTemp == null) return 'No baseline';
 
 	const delta = currentTemp - previousTemp;
 	const sign = delta >= 0 ? '+' : '';
 	return `${sign}${delta.toFixed(1)}°C vs previous day`;
+}
+
+function avg(values: number[]): number | null {
+	if (values.length === 0) return null;
+	return values.reduce((a, b) => a + b, 0) / values.length;
 }
 
 export default function KpiGrid({ current, history, advisory, isLoading, error }: KpiGridProps) {
@@ -84,15 +77,30 @@ export default function KpiGrid({ current, history, advisory, isLoading, error }
 	const realtime = (current ?? null) as WeatherWithOptionalRealtime | null;
 	const currentTemp = realtime?.temperature ?? current?.temperature_2m_max ?? current?.temperature_2m_mean;
 	const aqi = realtime?.aqi ?? null;
-	const humidity = realtime?.humidity ?? current?.relative_humidity_2m_mean;
-	const rainfall = realtime?.precipitation ?? current?.rain_sum;
+	const todayHumidity = realtime?.humidity ?? current?.relative_humidity_2m_mean;
+	const todayRainfall = realtime?.precipitation ?? current?.rain_sum;
+
+	// Period aggregates from history (active when date range > 1 day)
+	const periodDays = history.length;
+	const usePeriod = periodDays > 1;
+
+	const historyTemps = history.map(r => r.temperature_2m_max ?? r.temperature_2m_mean).filter((v): v is number => v != null);
+	const periodAvgTemp = avg(historyTemps);
+
+	const periodTotalRain = history.reduce((sum, r) => sum + (r.rain_sum ?? 0), 0);
+
+	const historyHumidity = history.map(r => r.relative_humidity_2m_mean).filter((v): v is number => v != null);
+	const periodAvgHumidity = avg(historyHumidity);
 
 	const advisoryText = advisory?.advice_text ?? 'No advisory available';
+
 	const cards = [
 		{
-			label: 'Current Temp',
-			value: `${formatNumber(currentTemp)}°C`,
-			trend: resolveTempDelta(history, current),
+			label: usePeriod ? `${periodDays}d Avg Temp` : 'Current Temp',
+			value: `${formatNumber(usePeriod ? periodAvgTemp : currentTemp)}°C`,
+			trend: usePeriod
+				? `Today: ${formatNumber(currentTemp)}°C`
+				: resolveTempDelta(history, current),
 			icon: 'fa-temperature-half',
 			color: 'text-orange-500 dark:text-orange-400',
 			bg: 'bg-orange-50 dark:bg-orange-500/10',
@@ -106,17 +114,19 @@ export default function KpiGrid({ current, history, advisory, isLoading, error }
 			bg: 'bg-red-50 dark:bg-red-500/10',
 		},
 		{
-			label: 'Humidity',
-			value: `${formatNumber(humidity, 0)}%`,
+			label: usePeriod ? `${periodDays}d Avg Humidity` : 'Humidity',
+			value: `${formatNumber(usePeriod ? periodAvgHumidity : todayHumidity, 0)}%`,
 			trend: advisory?.risk_level ? `Risk: ${advisory.risk_level}` : 'No risk level',
 			icon: 'fa-droplet',
 			color: 'text-cyan-500 dark:text-cyan-400',
 			bg: 'bg-cyan-50 dark:bg-cyan-500/10',
 		},
 		{
-			label: 'Rainfall',
-			value: `${formatNumber(rainfall)} mm`,
-			trend: advisoryText.length > 36 ? `${advisoryText.slice(0, 36)}...` : advisoryText,
+			label: usePeriod ? `${periodDays}d Total Rain` : 'Rainfall',
+			value: `${formatNumber(usePeriod ? periodTotalRain : todayRainfall)} mm`,
+			trend: usePeriod
+				? `Today: ${formatNumber(todayRainfall)} mm`
+				: advisoryText.length > 36 ? `${advisoryText.slice(0, 36)}...` : advisoryText,
 			icon: 'fa-cloud-rain',
 			color: 'text-blue-500 dark:text-blue-400',
 			bg: 'bg-blue-50 dark:bg-blue-500/10',

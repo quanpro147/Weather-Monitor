@@ -24,7 +24,8 @@ class Settings:
     supabase_anon_key: str = field(default_factory=lambda: _require("SUPABASE_ANON_KEY"))
     supabase_service_role_key: str = field(default_factory=lambda: _require("SUPABASE_SERVICE_ROLE_KEY"))
 
-    # Redis
+    # Redis — dùng REDIS_URL (Upstash/cloud) nếu có, fallback sang host/port/db cho local
+    redis_url: str | None = field(default_factory=lambda: os.getenv("REDIS_URL"))
     redis_host: str = field(default_factory=lambda: os.getenv("REDIS_HOST", "localhost"))
     redis_port: int = field(default_factory=lambda: int(os.getenv("REDIS_PORT", "6379")))
     redis_db: int = field(default_factory=lambda: int(os.getenv("REDIS_DB", "0")))

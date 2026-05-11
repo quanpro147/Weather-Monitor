@@ -15,12 +15,8 @@ _default_dev_origins = [
     "http://127.0.0.1:3001",
 ]
 
-_prod_origins = ["https://weather-monitor.vercel.app"]  # TODO: cập nhật domain thật khi deploy
-
-_env_origins = os.getenv("FRONTEND_ORIGINS", "")
-_dev_origins = [o.strip() for o in _env_origins.split(",") if o.strip()] or _default_dev_origins
-
-origins = _dev_origins if settings.app_env == "development" else _prod_origins
+_env_origins = [o.strip() for o in os.getenv("FRONTEND_ORIGINS", "").split(",") if o.strip()]
+origins = _env_origins if _env_origins else _default_dev_origins
 
 app.add_middleware(
     CORSMiddleware,

@@ -124,6 +124,18 @@ BEGIN
     END IF;
 END $$;
 
+-- ── RPC functions ────────────────────────────────────────────────────────────
+-- Trả về MAX(date) cho mỗi city — dùng bởi pipeline để chỉ fetch ngày còn thiếu.
+CREATE OR REPLACE FUNCTION public.get_city_latest_dates()
+RETURNS TABLE(city_id INTEGER, max_date DATE)
+LANGUAGE sql
+SECURITY DEFINER
+AS $$
+    SELECT city_id, MAX(date)::DATE AS max_date
+    FROM public.weather_daily
+    GROUP BY city_id;
+$$;
+
 -- ── Data retention policy ─────────────────────────────────────────────────────
 -- Keep rolling 900 days (~2.5 years) so year-over-year comparison is always available.
 -- One-time cleanup: DELETE FROM public.weather_daily WHERE date < '2024-01-01';

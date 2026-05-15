@@ -50,7 +50,9 @@ const DEFAULT_TIMEZONE = 'Asia/Ho_Chi_Minh';
 
 export function getTimezoneForCountry(country: string | null | undefined): string {
     if (!country) return DEFAULT_TIMEZONE;
-    return COUNTRY_TIMEZONE_MAP[country] ?? DEFAULT_TIMEZONE;
+    const key = country.trim().toLowerCase();
+    const entry = Object.entries(COUNTRY_TIMEZONE_MAP).find(([k]) => k.toLowerCase() === key);
+    return entry?.[1] ?? DEFAULT_TIMEZONE;
 }
 
 export function formatTimeInTimezone(date: Date, timezone: string): string {

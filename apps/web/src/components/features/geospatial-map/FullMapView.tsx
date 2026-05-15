@@ -6,10 +6,9 @@ import { listCities } from '../../../services/city.service';
 import { getCurrentWeatherBulk } from '../../../services/weather.service';
 import type { WeatherDaily } from '../../../types/weather';
 import type { City } from '../../../types/city';
-import type { MapDataPoint, MapViewportBounds } from './InteractiveMap';
+import type { MapDataPoint } from './InteractiveMap';
 
 type LayerId = 'aqi' | 'temp' | 'rain';
-type MapLoadMode = 'viewport' | 'overview';
 
 type WeatherWithRealtime = WeatherDaily & {
     aqi?: number | null;
@@ -61,23 +60,11 @@ export default function FullMapView() {
     const [mapData, setMapData] = useState<MapDataPoint[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [mapViewport, setMapViewport] = useState<MapViewportBounds | null>(null);
-    const [loadMode, setLoadMode] = useState<MapLoadMode>('overview');
     const [visibleStationCount, setVisibleStationCount] = useState(0);
     const fetchSeqRef = useRef(0);
     const [quickInsights, setQuickInsights] = useState<QuickInsightsState>(
         buildThemePreset(true, 'Ben Tre')
     );
-
-    const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
-
-    const normalizeViewport = (viewport: MapViewportBounds): MapViewportBounds => ({
-        ...viewport,
-        minLat: clamp(viewport.minLat, -90, 90),
-        maxLat: clamp(viewport.maxLat, -90, 90),
-        minLng: clamp(viewport.minLng, -180, 180),
-        maxLng: clamp(viewport.maxLng, -180, 180),
-    });
 
     const getScopeLabel = (cityList: City[], selectedCityId: number | null) => {
         const selected = selectedCityId === null ? null : cityList.find((city) => city.city_id === selectedCityId);
@@ -86,9 +73,6 @@ export default function FullMapView() {
     };
 
     const fetchMapData = async () => {
-        const requiresViewport = scopeMode === 'global' && loadMode === 'viewport';
-        if (requiresViewport && !mapViewport) return;
-
         const requestId = ++fetchSeqRef.current;
         setIsLoading(true);
         setError(null);
@@ -99,23 +83,6 @@ export default function FullMapView() {
             if (scopeMode === 'vietnam') {
                 const vnByCanonical = await listCities({ country: 'Viet Nam' });
                 cityList = vnByCanonical.length > 0 ? vnByCanonical : await listCities({ country: 'Vietnam' });
-            } else if (requiresViewport && mapViewport) {
-                const viewport = normalizeViewport(mapViewport);
-                if (viewport.minLng <= viewport.maxLng) {
-                    cityList = await listCities({
-                        min_lat: viewport.minLat,
-                        max_lat: viewport.maxLat,
-                        min_lng: viewport.minLng,
-                        max_lng: viewport.maxLng,
-                        limit: VIEWPORT_CITY_LIMIT,
-                    });
-                } else {
-                    const [westWrap, eastWrap] = await Promise.all([
-                        listCities({ min_lat: viewport.minLat, max_lat: viewport.maxLat, min_lng: viewport.minLng, max_lng: 180, limit: VIEWPORT_CITY_LIMIT }),
-                        listCities({ min_lat: viewport.minLat, max_lat: viewport.maxLat, min_lng: -180, max_lng: viewport.maxLng, limit: VIEWPORT_CITY_LIMIT }),
-                    ]);
-                    cityList = Array.from(new Map([...westWrap, ...eastWrap].map((item) => [item.city_id, item])).values());
-                }
             } else {
                 cityList = await listCities({ limit: OVERVIEW_CITY_LIMIT });
             }
@@ -179,12 +146,7 @@ export default function FullMapView() {
     useEffect(() => {
         const timer = setTimeout(() => { void fetchMapData(); }, FETCH_DEBOUNCE_MS);
         return () => clearTimeout(timer);
-    }, [cityId, scopeMode, loadMode, mapViewport]);
-
-    useEffect(() => {
-        if (scopeMode === 'global') { setLoadMode('viewport'); return; }
-        setLoadMode('overview');
-    }, [scopeMode]);
+    }, [cityId, scopeMode]);
 
     useEffect(() => {
         if (mapData.length === 0 && !isLoading) {
@@ -239,10 +201,6 @@ export default function FullMapView() {
                         error={error}
                         activeLayer={activeLayer}
                         scopeMode={scopeMode}
-                        onViewportChange={(nextViewport) => {
-                            if (scopeMode !== 'global') return;
-                            setMapViewport(nextViewport);
-                        }}
                     />
                 </div>
 
@@ -271,35 +229,6 @@ export default function FullMapView() {
                             );
                         })}
                     </div>
-
-                    {/* View Mode (global only) */}
-                    {scopeMode === 'global' && (
-                        <>
-                            <div className={`mx-3 border-t ${sectionDivider}`} />
-                            <div className="px-3 pt-2.5 pb-1 shrink-0">
-                                <p className={`text-[9px] font-bold uppercase tracking-widest ${sectionLabel}`}>View Mode</p>
-                            </div>
-                            <div className="flex flex-col px-1.5 pb-2 gap-0.5 shrink-0">
-                                {([
-                                    { id: 'viewport' as MapLoadMode, icon: 'fa-crop-simple', label: 'Viewport Focus' },
-                                    { id: 'overview' as MapLoadMode, icon: 'fa-earth-asia', label: 'Global Overview' },
-                                ] as { id: MapLoadMode; icon: string; label: string }[]).map((mode) => {
-                                    const isActive = loadMode === mode.id;
-                                    return (
-                                        <button
-                                            key={mode.id}
-                                            onClick={() => setLoadMode(mode.id)}
-                                            className={`flex items-center gap-2.5 px-2 py-2 rounded-lg text-xs font-semibold transition-all ${isActive ? btnActive : btnInactive}`}
-                                        >
-                                            <i className={`fa-solid ${mode.icon} w-4 text-center`} />
-                                            <span className="flex-1 text-left">{mode.label}</span>
-                                            {isActive && <i className="fa-solid fa-check text-[10px]" />}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </>
-                    )}
 
                     {/* Quick Insights */}
                     <div className={`mx-3 border-t ${sectionDivider}`} />
@@ -349,5 +278,4 @@ export default function FullMapView() {
 }
 
 const OVERVIEW_CITY_LIMIT = 220;
-const VIEWPORT_CITY_LIMIT = 160;
 const FETCH_DEBOUNCE_MS = 220;

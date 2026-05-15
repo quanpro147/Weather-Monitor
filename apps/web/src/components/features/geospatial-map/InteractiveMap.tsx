@@ -190,6 +190,7 @@ export default function InteractiveMap({ data, isLoading = false, error = null, 
                 scrollWheelZoom={true}
                 className="w-full h-full"
                 zoomControl={false}
+                attributionControl={false}
             >
                 <MapResizer />
                 <ViewportObserver onViewportChange={onViewportChange} />

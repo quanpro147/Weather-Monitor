@@ -65,7 +65,7 @@ export default function Topbar() {
         return () => {
             active = false;
         };
-    }, [cityId, scopeMode, setCityId]);
+    }, [scopeMode, setCityId]);
 
     const countries = React.useMemo(() => {
         if (scopeMode !== 'global') return [];
@@ -89,7 +89,10 @@ export default function Topbar() {
         () => cities.find(c => c.city_id === cityId) ?? null,
         [cities, cityId]
     );
-    const timezone = getTimezoneForCountry(selectedCity?.country);
+    const timezone = React.useMemo(
+        () => getTimezoneForCountry(selectedCity?.country),
+        [selectedCity]
+    );
     const tzAbbr = React.useMemo(() => getTimezoneAbbr(timezone), [timezone]);
 
     const handleCountryChange = (country: string) => {

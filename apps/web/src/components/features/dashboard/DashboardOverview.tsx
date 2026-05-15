@@ -129,7 +129,6 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
     const {
         records: anomalyRecords,
         anomalyCount,
-        isLoading: anomalyLoading,
     } = useAnomalyData({ cityId, startDate, endDate, enabled: cityId !== null });
 
     // Đảm bảo chart chỉ render trên client
@@ -334,22 +333,11 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
     // Gộp mảng quá khứ và tương lai lại làm một đường thẳng băng
     const trendData = [...historyData, ...forecastData];
 
-    const backendDataState = weatherLoading || anomalyLoading || advisoryLoading
-        ? 'Loading live backend data...'
-        : weatherError || advisoryError
-            ? `Data error: ${weatherError ?? advisoryError}`
-            : `Live mode: ${formatNumber(mainTemp)}°C, anomalies ${anomalyCount}`;
-
     const mainCondition = advisory?.advice_text ?? 'No advisory message available from backend.';
     const tempTrend = resolveTempDelta(current, history);
 
     return (
         <div className="mx-auto w-full max-w-[1500px] flex flex-col gap-4 animate-in fade-in duration-700">
-            {/* Global Status Bar */}
-            <div className="rounded-xl border border-gray-200 dark:border-[#2a2a2a] bg-white dark:bg-[#151515] px-4 py-2 text-xs font-semibold text-gray-700 dark:text-[#d1d5db] shadow-sm">
-                {backendDataState}
-            </div>
-            
             {/* ROW 1: Snapshot KPIs */}
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
                 {/* Large Main Weather Card */}
@@ -390,6 +378,37 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
                     error={weatherError ?? advisoryError}
                 />
             </div>
+
+            {/* ROW 1.5: 5-Day Forecast Strip */}
+            <section className="bg-white dark:bg-[#1e1e1e] border border-gray-200 dark:border-[#2a2a2a] rounded-2xl p-4 shadow-sm">
+                <div className="mb-3">
+                    <h3 className="text-xs font-black text-gray-900 dark:text-[#f3f4f6] uppercase tracking-wider">5-Day Forecast</h3>
+                </div>
+                <div className="grid grid-cols-3 gap-3 sm:grid-cols-5">
+                    {current && (
+                        <div className="flex flex-col items-center gap-2 rounded-xl border border-gray-100 dark:border-[#2a2a2a] bg-gray-50 dark:bg-[#151515] py-4 px-2">
+                            <p className="text-[10px] font-black uppercase tracking-wider text-gray-500 dark:text-gray-400">Today</p>
+                            <i className={`fa-solid ${(current.rain_sum ?? 0) > 5 ? 'fa-cloud-rain text-blue-400' : (current.temperature_2m_max ?? 0) > 35 ? 'fa-sun text-orange-400' : 'fa-cloud-sun text-yellow-400'} text-3xl`}></i>
+                            <p className="text-xl font-black text-orange-500">{current.temperature_2m_max !== null && current.temperature_2m_max !== undefined ? `${Math.round(current.temperature_2m_max)}°` : '--'}</p>
+                            <p className="text-xs font-semibold text-gray-400">{current.temperature_2m_min !== null && current.temperature_2m_min !== undefined ? `${Math.round(current.temperature_2m_min)}°` : '--'}</p>
+                        </div>
+                    )}
+                    {forecastList.slice(0, 4).map((f) => {
+                        const parts = f.date.split('-');
+                        const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+                        const dayLabel = `${ ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()] } ${d.getDate()}`;
+                        const iconClass = f.predicted_temperature > 35 ? 'fa-sun text-orange-400' : 'fa-cloud-sun text-yellow-400';
+                        return (
+                            <div key={f.date} className="flex flex-col items-center gap-2 rounded-xl border border-gray-100 dark:border-[#2a2a2a] bg-gray-50 dark:bg-[#151515] py-4 px-2">
+                                <p className="text-[10px] font-black uppercase tracking-wider text-gray-500 dark:text-gray-400">{dayLabel}</p>
+                                <i className={`fa-solid ${iconClass} text-3xl`}></i>
+                                <p className="text-xl font-black text-orange-500">{Math.round(f.predicted_temperature + 1)}°</p>
+                                <p className="text-xs font-semibold text-gray-400">{Math.round(f.predicted_temperature - 1)}°</p>
+                            </div>
+                        );
+                    })}
+                </div>
+            </section>
 
             {/* ROW 2: Explainable Alert & Insight Hub */}
             <section className="bg-white dark:bg-[#1e1e1e] border border-gray-200 dark:border-[#2a2a2a] rounded-2xl p-5 shadow-sm">
@@ -483,9 +502,9 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
                 <article className="bg-white dark:bg-[#1e1e1e] border border-gray-200 dark:border-[#2a2a2a] rounded-2xl p-5 xl:col-span-5 shadow-sm flex flex-col">
                     <div className="mb-3 flex items-center justify-between">
                         <h3 className="text-xs font-black text-gray-900 dark:text-[#f3f4f6] uppercase tracking-wider">Geospatial Map</h3>
-                        <span className="text-[9px] font-bold text-gray-400 uppercase">Vietnam Region</span>
+                        <span className="text-[9px] font-bold text-gray-400 uppercase">{scopeMode === 'vietnam' ? 'Vietnam Region' : 'Global View'}</span>
                     </div>
-                    <div className="relative flex-1 min-h-[300px] overflow-hidden rounded-xl border border-gray-100 dark:border-[#2a2a2a] bg-gray-50 dark:bg-[#151515] flex items-center justify-center">
+                    <div className="relative flex-1 min-h-[420px] overflow-hidden rounded-xl border border-gray-100 dark:border-[#2a2a2a] bg-gray-50 dark:bg-[#151515] flex items-center justify-center">
                         <InteractiveMap isDark={isDark} data={mapData} isLoading={mapLoading} error={mapError} scopeMode={scopeMode} />
                     </div>
                 </article>
@@ -497,7 +516,7 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
                         <span className="text-[9px] font-bold text-gray-400 uppercase">History + Forecast Trend</span>
                     </div>
 
-                    <div className="flex-1 min-h-[300px] w-full min-w-0">
+                    <div className="flex-1 min-h-[420px] w-full min-w-0">
                         {chartReady ? (
                         <ResponsiveContainer width="100%" height="100%">
                             <ComposedChart data={trendData.length > 0 ? trendData : [{ time: '--', tempActual: 0, anomalyTemp: null, tempForecast: 0, rainfall: 0, aqi: null }]} margin={{ top: 5, right: -10, left: -25, bottom: 0 }}>
@@ -521,7 +540,7 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
                                         boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
                                     }}
                                 />
-                                <Legend iconType="circle" wrapperStyle={{ paddingTop: '10px', fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase' }} />
+                                <Legend iconType="circle" wrapperStyle={{ paddingTop: '10px', fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', color: isDark ? '#e5e7eb' : '#374151' }} />
 
                                 <Area yAxisId="right" type="monotone" dataKey="rainfall" name="Rain (mm)" stroke="#0ea5e9" fill="url(#rainFill)" strokeWidth={2} />
                                 
@@ -532,10 +551,10 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
                                 <Line yAxisId="left" type="monotone" dataKey="tempForecast" name="7-Day Forecast" stroke="#fdba74" strokeDasharray="5 5" strokeWidth={3} dot={false} connectNulls />
                                 
                                 {/* Điểm cảnh báo Anomaly (Chấm đỏ lồi lên) */}
-                                <Line yAxisId="left" type="monotone" dataKey="anomalyTemp" name="Anomaly Alert" stroke="none" isAnimationActive={false} dot={{ r: 6, fill: '#ef4444', stroke: '#ffffff', strokeWidth: 2 }} activeDot={{ r: 8 }} />
+                                <Line yAxisId="left" type="monotone" dataKey="anomalyTemp" name="Anomaly Alert" stroke="#ef4444" strokeWidth={0} isAnimationActive={false} dot={{ r: 6, fill: '#ef4444', stroke: isDark ? '#1e1e1e' : '#ffffff', strokeWidth: 2 }} activeDot={{ r: 8 }} />
                                 
                                 {/* Missing AQI remains null; connectNulls=false to show signal break explicitly. */}
-                                <Line yAxisId="right" type="monotone" dataKey="aqi" name="AQI" stroke="#ef4444" strokeWidth={2} dot={{ r: 2 }} connectNulls={false} />
+                                <Line yAxisId="right" type="monotone" dataKey="aqi" name="AQI" stroke="#a855f7" strokeWidth={2} dot={{ r: 2, fill: '#a855f7' }} connectNulls={false} />
                             </ComposedChart>
                         </ResponsiveContainer>
                         ) : (

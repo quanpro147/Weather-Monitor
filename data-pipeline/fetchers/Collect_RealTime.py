@@ -1,5 +1,6 @@
 import logging
 import os
+import random
 import time
 import datetime
 import pandas as pd
@@ -15,8 +16,15 @@ _TRANSIENT_ERRORS = (
     requests.exceptions.Timeout,
     requests.exceptions.ChunkedEncodingError,
 )
-_MAX_RETRIES = 3
-_RETRY_BACKOFF = (1.0, 5.0, 15.0)
+_MAX_RETRIES = 5
+_RETRY_BACKOFF = (1.0, 5.0, 15.0, 30.0, 60.0)
+
+# Open-Meteo free tier: ~10 000 req/day, bursts allowed.
+# On 429 we use exponential backoff with jitter instead of a flat 3600s sleep.
+# Max wait cap is 300s (5 min) — more than enough for a per-minute limit reset.
+_RATE_LIMIT_BASE_WAIT = 30   # seconds for first 429
+_RATE_LIMIT_MAX_WAIT  = 300  # hard cap per backoff step
+_RATE_LIMIT_MAX_TOTAL = 3    # give up after this many consecutive 429s per city
 
 load_dotenv()
 
@@ -78,18 +86,44 @@ def fetch_and_save_city(city_id: int, city_name: str, lat: float, lon: float,
     }
 
     attempt = 0
+    rate_limit_count = 0
+
+    def _jittered_wait(base: float, step: int, cap: float) -> float:
+        """Exponential backoff with full jitter: uniform random in [0, min(cap, base * 2^step)]."""
+        ceiling = min(cap, base * (2 ** step))
+        return random.uniform(0, ceiling)
+
     while True:
         try:
             response = requests.get(url, params=params, timeout=30)
 
             if response.status_code == 429:
-                reason = response.json().get("reason", "")
-                wait = 3600 if "Hourly" in reason else 60
-                logger.warning("Rate limit for %s. Waiting %ds...", city_name, wait)
+                rate_limit_count += 1
+                if rate_limit_count > _RATE_LIMIT_MAX_TOTAL:
+                    logger.error(
+                        "Too many rate-limit responses for %s (%d consecutive). Giving up.",
+                        city_name, rate_limit_count,
+                    )
+                    return False
+
+                # Parse reason safely — body may not be JSON (proxy 429s return HTML).
+                reason = ""
+                try:
+                    reason = response.json().get("reason", "")
+                except ValueError:
+                    pass
+
+                wait = _jittered_wait(_RATE_LIMIT_BASE_WAIT, rate_limit_count - 1, _RATE_LIMIT_MAX_WAIT)
+                logger.warning(
+                    "Rate limit for %s (attempt %d/%d, reason=%r). Waiting %.0fs...",
+                    city_name, rate_limit_count, _RATE_LIMIT_MAX_TOTAL, reason, wait,
+                )
                 time.sleep(wait)
-                attempt = 0  # rate-limit sleep is not a retry — reset counter
+                # Do NOT reset attempt — rate-limit waits are on top of transient retries.
                 continue
 
+            # Reset rate-limit counter on any successful response.
+            rate_limit_count = 0
             response.raise_for_status()
             data = response.json()
 

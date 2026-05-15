@@ -119,7 +119,7 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
     const [mapLoading, setMapLoading] = useState(false);
     const [mapError, setMapError] = useState<string | null>(null);
     
-    const { cityId, scopeMode, startDate, endDate } = useGlobalFilter();
+    const { cityId, scopeMode, startDate, endDate, setLastUpdatedDate } = useGlobalFilter();
     const {
         current,
         history,
@@ -136,6 +136,12 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
     useEffect(() => {
         setChartReady(true);
     }, []);
+
+    useEffect(() => {
+        if (current?.date) {
+            setLastUpdatedDate(current.date);
+        }
+    }, [current?.date, setLastUpdatedDate]);
 
     useEffect(() => {
         let active = true;

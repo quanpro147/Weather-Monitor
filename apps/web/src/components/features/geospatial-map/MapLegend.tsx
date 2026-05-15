@@ -1,70 +1,59 @@
 import React from 'react';
 import type { LayerId } from './InteractiveMap';
-import { useTheme } from '../../../contexts/ThemeContext'; // Import Context
+import { useTheme } from '../../../contexts/ThemeContext';
 
 interface MapLegendProps {
     activeLayer?: LayerId;
 }
 
+const legendConfig: Record<LayerId, { title: string; gradient: string; ticks: string[] }> = {
+    aqi: {
+        title: 'AQI Risk Level',
+        gradient: 'linear-gradient(to right, #10b981, #fbbf24, #f97316, #ef4444, #a855f7)',
+        ticks: ['Good', 'Moderate', 'Sensitive', 'Unhealthy', 'Hazardous'],
+    },
+    temp: {
+        title: 'Temperature (°C)',
+        gradient: 'linear-gradient(to right, #3b82f6, #10b981, #fbbf24, #f97316, #ef4444)',
+        ticks: ['<24°', '24-28°', '29-33°', '34-37°', '>37°'],
+    },
+    rain: {
+        title: 'Rainfall (mm)',
+        gradient: 'linear-gradient(to right, #9ca3af, #7dd3fc, #38bdf8, #0284c7, #1e3a8a)',
+        ticks: ['Dry', 'Light', 'Moderate', 'Heavy', 'Violent'],
+    },
+};
+
 export default function MapLegend({ activeLayer = 'aqi' }: MapLegendProps) {
-    const { isDark } = useTheme(); // Lấy trực tiếp từ Context
-
-    const legends = {
-        aqi: {
-            title: 'AQI Risk Level',
-            items: [
-                { color: 'bg-[#10b981]', label: 'Good (0-50)' },
-                { color: 'bg-[#fbbf24]', label: 'Moderate (51-100)' },
-                { color: 'bg-[#f97316]', label: 'Sensitive (101-150)' },
-                { color: 'bg-[#ef4444]', label: 'Unhealthy (151-200)' },
-                { color: 'bg-[#a855f7]', label: 'Hazardous (201+)' },
-            ]
-        },
-        temp: {
-            title: 'Temperature (°C)',
-            items: [
-                { color: 'bg-[#3b82f6]', label: 'Cool (< 24°C)' },
-                { color: 'bg-[#10b981]', label: 'Optimal (24-28°C)' },
-                { color: 'bg-[#fbbf24]', label: 'Warm (29-33°C)' },
-                { color: 'bg-[#f97316]', label: 'Hot (34-37°C)' },
-                { color: 'bg-[#ef4444]', label: 'Extreme (> 37°C)' },
-            ]
-        },
-        rain: {
-            title: 'Rainfall (mm)',
-            items: [
-                { color: 'bg-gray-300 dark:bg-gray-600', label: 'Dry (0 mm)' },
-                { color: 'bg-[#7dd3fc]', label: 'Light (0.1 - 5)' },
-                { color: 'bg-[#38bdf8]', label: 'Moderate (5 - 15)' },
-                { color: 'bg-[#0284c7]', label: 'Heavy (15 - 50)' },
-                { color: 'bg-[#1e3a8a]', label: 'Violent (> 50)' },
-            ]
-        }
-    };
-
-    const currentLegend = legends[activeLayer];
+    const { isDark } = useTheme();
+    const config = legendConfig[activeLayer];
 
     return (
-        <div className={`absolute bottom-3 right-3 z-[400] rounded-lg px-2.5 py-2 shadow-lg border backdrop-blur-md transition-colors ${
-            isDark ? 'bg-[#101010]/75 border-[#2a2a2a]' : 'bg-white/75 border-gray-200'
-        }`}>
-            <p className={`text-[9px] font-bold uppercase tracking-widest mb-1.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                {currentLegend.title}
+        <div
+            className={`absolute bottom-5 z-[400] rounded-lg px-3 py-2.5 shadow-lg border backdrop-blur-md transition-colors ${
+                isDark ? 'bg-[#101010]/80 border-[#2a2a2a]' : 'bg-white/80 border-gray-200'
+            }`}
+            style={{ left: 210, minWidth: 260 }}
+        >
+            <p className={`text-[9px] font-bold uppercase tracking-widest mb-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                {config.title}
             </p>
-            
-            <div className="flex flex-col gap-1">
-                {currentLegend.items.map((item) => (
-                    <div key={item.label} className="flex items-center gap-1.5">
-                        <div className={`w-2 h-2 rounded-full ${item.color} border border-white/20 shadow-sm`}></div>
-                        <span className={`text-[9px] font-medium tracking-wide ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                            {item.label}
-                        </span>
-                    </div>
+
+            <div className="w-full h-2 rounded-full mb-1.5" style={{ background: config.gradient }} />
+
+            <div className="flex justify-between">
+                {config.ticks.map((tick) => (
+                    <span key={tick} className={`text-[8px] font-semibold ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                        {tick}
+                    </span>
                 ))}
-                <div className="flex items-center gap-1.5 mt-1 border-t border-gray-500/30 pt-1">
-                    <div className="w-2 h-2 rounded-full bg-slate-500 border border-white/20 shadow-sm"></div>
-                    <span className={`text-[9px] font-medium tracking-wide ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Offline / N/A</span>
-                </div>
+            </div>
+
+            <div className={`mt-2 pt-1.5 border-t flex items-center gap-1.5 ${isDark ? 'border-[#2a2a2a]' : 'border-gray-200'}`}>
+                <div className="w-2 h-2 rounded-full bg-slate-500 shrink-0" />
+                <span className={`text-[8px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                    Offline / No Data
+                </span>
             </div>
         </div>
     );

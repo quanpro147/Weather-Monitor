@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { getCurrentWeather, getWeatherHistory, getWeatherStats } from '../services/weather.service';
 import type { ISODateString } from '../types/common';
 import type { WeatherDaily, WeatherStats } from '../types/weather';
+
+// Matches CURRENT_CACHE_TTL on the backend (900 s) — re-fetch just after Redis expires.
+const POLL_INTERVAL_MS = 15 * 60 * 1_000;
 
 interface UseWeatherDataParams {
 	cityId: number | null;
@@ -78,6 +81,17 @@ export function useWeatherData({
 	useEffect(() => {
 		void refetch();
 	}, [refetch]);
+
+	// Keep a stable ref so the interval can call the latest refetch without
+	// restarting the timer on every dep change.
+	const refetchRef = useRef(refetch);
+	useEffect(() => { refetchRef.current = refetch; }, [refetch]);
+
+	useEffect(() => {
+		if (!enabled || cityId === null) return;
+		const id = setInterval(() => void refetchRef.current(), POLL_INTERVAL_MS);
+		return () => clearInterval(id);
+	}, [enabled, cityId]);
 
 	return {
 		current,

@@ -366,7 +366,9 @@ def get_weather_history(
     )
 
     records = [WeatherDaily(**row) for row in resp.data]
-    cache.setex(cache_key, CACHE_TTL, json.dumps([r.model_dump(mode="json") for r in records]))
+    # Use short TTL when the range includes today so fresh pipeline data appears quickly.
+    ttl = CURRENT_CACHE_TTL if end_date >= datetime.date.today() else CACHE_TTL
+    cache.setex(cache_key, ttl, json.dumps([r.model_dump(mode="json") for r in records]))
     return ApiResponse(success=True, data=records)
 
 

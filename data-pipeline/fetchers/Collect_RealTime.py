@@ -53,7 +53,7 @@ def _float(val) -> float | None:
 
 
 def fetch_and_save_city(city_id: int, city_name: str, lat: float, lon: float,
-                        start_date: datetime.date, end_date: datetime.date) -> None:
+                        start_date: datetime.date, end_date: datetime.date) -> bool:
     url = "https://archive-api.open-meteo.com/v1/archive"
     params = {
         "latitude": lat,
@@ -82,7 +82,7 @@ def fetch_and_save_city(city_id: int, city_name: str, lat: float, lon: float,
             dates = daily.get("time", [])
             if not dates:
                 print(f"No data for {city_name}")
-                return
+                return False
 
             def get_val(key: str, idx: int):
                 arr = daily.get(key, [])
@@ -122,11 +122,26 @@ def fetch_and_save_city(city_id: int, city_name: str, lat: float, lon: float,
                 ).execute()
 
             print(f"Saved {len(records)} records for {city_name}")
-            return
+            return True
 
         except Exception as e:
             print(f"Error fetching {city_name}: {e}")
-            return
+            return False
+
+
+def _print_date_summary(label: str, city_latest_dates: dict[int, datetime.date], total_cities: int) -> None:
+    from collections import Counter
+    date_counts: Counter = Counter(city_latest_dates.values())
+    no_data = total_cities - len(city_latest_dates)
+    print(f"\n{'='*50}")
+    print(f"[{label}] Date distribution across {total_cities} cities:")
+    for d, count in sorted(date_counts.items(), reverse=True):
+        print(f"  {d}  →  {count} cities")
+    if no_data > 0:
+        print(f"  (no data)  →  {no_data} cities")
+    if date_counts:
+        print(f"  Latest date in DB: {max(date_counts.keys())}")
+    print('='*50)
 
 
 def main() -> None:
@@ -134,11 +149,14 @@ def main() -> None:
 
     csv_path = os.path.join(os.path.dirname(__file__), "cities_1500.csv")
     cities_df = pd.read_csv(csv_path)
+    total_cities = len(cities_df)
 
     setup_cities(cities_df)
 
     end_date = datetime.date.today() - datetime.timedelta(days=1)
     city_latest_dates = get_city_latest_dates()
+
+    _print_date_summary("BEFORE", city_latest_dates, total_cities)
 
     needs_update = any(
         not city_latest_dates.get(int(row["ID"])) or
@@ -150,21 +168,35 @@ def main() -> None:
         print(f"[{datetime.datetime.now()}] Dữ liệu đã mới nhất. Bỏ qua.")
         return
 
+    fetched = 0
+    skipped = 0
+    errors = 0
+
     for _, row in cities_df.iterrows():
         city_id = int(row["ID"])
         latest_date = city_latest_dates.get(city_id)
 
         if latest_date:
             if (datetime.date.today() - latest_date).days < 2:
+                skipped += 1
                 continue
             start_date = latest_date + datetime.timedelta(days=1)
         else:
             start_date = datetime.date(2020, 1, 1)
 
-        print(f"Fetching {row['City']} from {start_date} to {end_date}")
-        fetch_and_save_city(city_id, row["City"], row["Latitude"], row["Longitude"],
-                            start_date, end_date)
+        print(f"Fetching {row['City']} ({city_id}) from {start_date} to {end_date}")
+        ok = fetch_and_save_city(city_id, row["City"], row["Latitude"], row["Longitude"],
+                                 start_date, end_date)
+        if ok:
+            fetched += 1
+        else:
+            errors += 1
         time.sleep(0.8)
+
+    print(f"\n[{datetime.datetime.now()}] Run summary: fetched={fetched}, skipped={skipped}, errors={errors}")
+
+    final_dates = get_city_latest_dates()
+    _print_date_summary("AFTER", final_dates, total_cities)
 
     print(f"[{datetime.datetime.now()}] Finished data collection.")
 

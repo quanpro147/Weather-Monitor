@@ -3,3 +3,4 @@ pandas==2.2.2
 python-dotenv==1.0.1
 psycopg2-binary
 schedule
+supabase>=2.0.0

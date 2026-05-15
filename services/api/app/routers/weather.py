@@ -22,6 +22,7 @@ from services.api.app.services.weather_provider import fetch_current_enrichment
 router = APIRouter(prefix="/weather", tags=["weather"])
 
 CACHE_TTL = 21600       # 6h — historical data is stable
+CURRENT_CACHE_TTL = 900 # 15m — current weather updates when pipeline runs
 ADVISORY_TTL = 3600     # 1h — advisory is based on latest data
 BULK_CACHE_TTL = 900    # 15m — bulk map payload for fast repeated loads
 MAX_BULK_CITY_IDS = 300
@@ -270,7 +271,7 @@ def get_current_weather_bulk(
         records.append(record)
 
         # Reuse per-city cache so single-city endpoint becomes hot as well.
-        cache.setex(f"weather:{city_id}:current", CACHE_TTL, record.model_dump_json())
+        cache.setex(f"weather:{city_id}:current", CURRENT_CACHE_TTL, record.model_dump_json())
 
     cache.setex(cache_key, BULK_CACHE_TTL, json.dumps([r.model_dump(mode="json") for r in records]))
     return ApiResponse(success=True, data=records)
@@ -324,7 +325,7 @@ def get_current_weather(city_id: int):
     }
 
     record = WeatherCurrentResponse(**payload)
-    cache.setex(cache_key, CACHE_TTL, record.model_dump_json())
+    cache.setex(cache_key, CURRENT_CACHE_TTL, record.model_dump_json())
     return ApiResponse(success=True, data=record)
 
 
@@ -365,7 +366,9 @@ def get_weather_history(
     )
 
     records = [WeatherDaily(**row) for row in resp.data]
-    cache.setex(cache_key, CACHE_TTL, json.dumps([r.model_dump(mode="json") for r in records]))
+    # Use short TTL when the range includes today so fresh pipeline data appears quickly.
+    ttl = CURRENT_CACHE_TTL if end_date >= datetime.date.today() else CACHE_TTL
+    cache.setex(cache_key, ttl, json.dumps([r.model_dump(mode="json") for r in records]))
     return ApiResponse(success=True, data=records)
 
 

@@ -1,6 +1,11 @@
 """
 LLM-powered weather summary using Google Gemini.
 
+Supports multiple API keys for quota rotation:
+  GEMINI_API_KEY, GEMINI_API_KEY_2, GEMINI_API_KEY_3, ...
+When a key hits 429 (quota exceeded), the next key is tried automatically.
+If all keys are exhausted, a rule-based summary is returned from the raw data.
+
 The prompt is structured to produce a proper meteorologist-style insight:
   1. Overall trend characterisation (warming / cooling / stable, wet / dry)
   2. Notable extremes or anomalies with concrete numbers
@@ -42,6 +47,20 @@ Write a structured insight report in English with exactly these four parts — n
 
 Be specific and data-driven. Quote actual numbers. Do not use phrases like "Overall", "It is worth noting", "In summary".
 """
+
+
+def _load_gemini_keys() -> List[str]:
+    """Collect all configured Gemini API keys in priority order (supports up to 10 keys)."""
+    _placeholder = "your_api_key_here"
+    candidates = [os.getenv("GEMINI_API_KEY", "")] + [
+        os.getenv(f"GEMINI_API_KEY_{i}", "") for i in range(2, 11)
+    ]
+    return [k for k in candidates if k and k != _placeholder]
+
+
+def _is_quota_error(exc: Exception) -> bool:
+    msg = str(exc)
+    return "429" in msg or "quota" in msg.lower() or "RESOURCE_EXHAUSTED" in msg
 
 
 def _compute_stats(records: List[dict]) -> dict:
@@ -86,34 +105,53 @@ def _compute_stats(records: List[dict]) -> dict:
     }
 
 
+def _rule_based_summary(city_name: str, stats: dict, period_days: int, anomaly_count: int) -> str:
+    """Generate a data-driven summary without an LLM when all API keys are exhausted."""
+    direction_phrases = {
+        "warming": f"a warming trend ({stats['slope_str']})",
+        "cooling": f"a cooling trend ({stats['slope_str']})",
+        "stable": "stable temperatures",
+    }
+    trend_phrase = direction_phrases.get(stats["trend_direction"], "stable temperatures")
+    anomaly_note = (
+        f"{anomaly_count} statistically unusual event(s) were detected during this period."
+        if anomaly_count
+        else "No significant anomalies were detected."
+    )
+    return (
+        f"Over the past {period_days} days, {city_name} recorded {trend_phrase} "
+        f"with a mean of {stats['temp_mean']}°C "
+        f"(max {stats['temp_max']}°C / min {stats['temp_min']}°C). "
+        f"Total rainfall was {stats['rain_total']} mm across {stats['rainy_days']} rainy days, "
+        f"with average humidity at {stats['humidity_mean']}% and peak winds of {stats['wind_max']} km/h. "
+        f"{anomaly_note}"
+    )
+
+
 def generate_weather_summary(
     city_name: str,
     recent_records: List[dict],
     anomaly_records: List[dict],
-) -> str:
+) -> tuple[str, str]:
     """
-    Call Gemini to generate a structured 4-sentence weather insight.
+    Generate a structured 4-sentence weather insight, rotating through Gemini keys on quota errors.
 
-    Parameters
-    ----------
-    city_name      : human-readable city name
-    recent_records : last 30 days of weather (used for stats); last 7 days sent verbatim
-    anomaly_records: records flagged by Isolation Forest
+    Returns
+    -------
+    (summary_text, provider_label)
+      provider_label is "Gemini 2.5 Flash" on success or "Rule-based" when all keys fail.
     """
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key or api_key == "your_api_key_here":
+    keys = _load_gemini_keys()
+    if not keys:
+        stats = _compute_stats(recent_records)
         return (
-            "AI summarization is not configured. "
-            "Weather data is currently within normal monitoring range."
+            _rule_based_summary(city_name, stats, len(recent_records), len(anomaly_records)),
+            "Rule-based",
         )
-
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-2.5-flash")
 
     stats = _compute_stats(recent_records)
     period_days = len(recent_records)
 
-    # Last 7 days verbatim for the daily table
     last_7 = sorted(recent_records, key=lambda r: r["date"])[-7:]
     weather_str = "\n".join(
         f"  {r['date']}: avg {r.get('temperature_2m_mean', 'N/A')}°C "
@@ -150,8 +188,23 @@ def generate_weather_summary(
         anomaly_data=anomaly_str,
     )
 
-    try:
-        response = model.generate_content(prompt)
-        return response.text.strip()
-    except Exception as exc:
-        raise RuntimeError(f"Gemini API call failed: {exc}") from exc
+    quota_errors: List[str] = []
+    for i, key in enumerate(keys, start=1):
+        key_label = "GEMINI_API_KEY" if i == 1 else f"GEMINI_API_KEY_{i}"
+        try:
+            genai.configure(api_key=key)
+            model = genai.GenerativeModel("gemini-2.5-flash")
+            response = model.generate_content(prompt)
+            return response.text.strip(), "Gemini 2.5 Flash"
+        except Exception as exc:
+            if _is_quota_error(exc):
+                quota_errors.append(key_label)
+                print(f"[summary] {key_label} quota exceeded, trying next key...")
+                continue
+            raise RuntimeError(f"Gemini API call failed: {exc}") from exc
+
+    print(f"[summary] All Gemini keys exhausted ({', '.join(quota_errors)}), using rule-based fallback.")
+    return (
+        _rule_based_summary(city_name, stats, period_days, len(anomaly_records)),
+        "Rule-based",
+    )

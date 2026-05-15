@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
 import MarkerClusterGroup from 'react-leaflet-cluster';
@@ -29,7 +29,6 @@ export interface MapViewportBounds {
     zoom: number;
 }
 
-// Đã xóa isDark khỏi Interface này
 interface InteractiveMapProps {
     data: MapDataPoint[];
     isLoading?: boolean;
@@ -61,7 +60,7 @@ const getPointColor = (point: MapDataPoint, layer: LayerId) => {
     if (layer === 'rain') {
         const val = point.rain;
         if (val === null || val === undefined) return '#64748b';
-        if (val === 0) return '#9ca3af'; 
+        if (val === 0) return '#9ca3af';
         if (val <= 5) return '#7dd3fc';
         if (val <= 15) return '#38bdf8';
         if (val <= 50) return '#0284c7';
@@ -70,18 +69,43 @@ const getPointColor = (point: MapDataPoint, layer: LayerId) => {
     return '#64748b';
 };
 
+function getLabelText(point: MapDataPoint, layer: LayerId): string | null {
+    if (layer === 'temp') {
+        if (point.temp === null || point.temp === undefined) return null;
+        return `${point.temp}°C`;
+    }
+    if (layer === 'aqi') {
+        if (point.aqi === null || point.aqi === undefined) return null;
+        return `${point.aqi}`;
+    }
+    if (layer === 'rain') {
+        if (point.rain === null || point.rain === undefined) return null;
+        return `${point.rain}mm`;
+    }
+    return null;
+}
+
 function formatMetric(value: number | null | undefined, suffix: string): string {
     if (value === null || value === undefined || Number.isNaN(value)) return 'N/A';
     return `${value}${suffix}`;
 }
 
-function createStationIcon(point: MapDataPoint, activeLayer: LayerId, isDark: boolean): L.DivIcon {
+function createStationIcon(point: MapDataPoint, activeLayer: LayerId, isDark: boolean, showLabel: boolean): L.DivIcon {
     const fillColor = getPointColor(point, activeLayer);
     const borderColor = isDark ? '#1e1e1e' : '#ffffff';
-    
+
+    const dotHtml = `<span style="display:block;width:16px;height:16px;border-radius:9999px;background:${fillColor};border:2px solid ${borderColor};box-shadow:0 0 4px rgba(0,0,0,0.3);"></span>`;
+
+    const labelText = showLabel ? getLabelText(point, activeLayer) : null;
+    const labelHtml = labelText
+        ? `<span style="position:absolute;top:18px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:9px;font-weight:700;color:#fff;text-shadow:0 0 3px rgba(0,0,0,0.9),0 0 6px rgba(0,0,0,0.6);pointer-events:none;">${labelText}</span>`
+        : '';
+
     return L.divIcon({
         className: 'station-marker-icon',
-        html: `<span style="display:block;width:16px;height:16px;border-radius:9999px;background:${fillColor};border:2px solid ${borderColor};box-shadow:0 0 4px rgba(0,0,0,0.3);"></span>`,
+        html: labelText
+            ? `<div style="position:relative;display:inline-block;">${dotHtml}${labelHtml}</div>`
+            : dotHtml,
         iconSize: [16, 16],
         iconAnchor: [8, 8],
     });
@@ -127,13 +151,16 @@ function ViewportObserver({ onViewportChange }: { onViewportChange?: (bounds: Ma
     return null;
 }
 
-// BỎ HẲN isDark KHỎI THAM SỐ
+function ZoomTracker({ onZoom }: { onZoom: (z: number) => void }) {
+    const map = useMapEvents({
+        zoomend() { onZoom(map.getZoom()); },
+    });
+    return null;
+}
+
 export default function InteractiveMap({ data, isLoading = false, error = null, activeLayer = 'aqi', scopeMode = 'vietnam', onViewportChange }: InteractiveMapProps) {
-    
-    // DUY NHẤT 1 SOURCE OF TRUTH: Lấy từ Context
     const { isDark } = useTheme();
 
-    // Sửa lại URL Light Mode chuẩn
     const tileUrl = isDark
         ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
         : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
@@ -141,6 +168,16 @@ export default function InteractiveMap({ data, isLoading = false, error = null, 
     const mapCenter: [number, number] = scopeMode === 'global' ? [20, 0] : [16.4, 106.5];
     const mapZoom = scopeMode === 'global' ? 2.25 : 5.2;
     const mapKey = `${scopeMode}-${isDark ? 'dark' : 'light'}`;
+
+    const [currentZoom, setCurrentZoom] = useState(mapZoom);
+
+    useEffect(() => {
+        setCurrentZoom(mapZoom);
+    }, [mapKey]);
+
+    const labelZoomThreshold = scopeMode === 'vietnam' ? 7 : 5;
+    const showLabel = currentZoom >= labelZoomThreshold;
+
     const showBlockingLoading = isLoading && data.length === 0;
     const showInlineLoading = isLoading && data.length > 0;
 
@@ -156,13 +193,13 @@ export default function InteractiveMap({ data, isLoading = false, error = null, 
             >
                 <MapResizer />
                 <ViewportObserver onViewportChange={onViewportChange} />
-                
-                {/* Thuộc tính key={tileUrl} ép render lại bản đồ khi đổi sáng tối */}
+                <ZoomTracker onZoom={setCurrentZoom} />
+
                 <TileLayer key={tileUrl} url={tileUrl} attribution='&copy; CARTO' />
 
                 <MarkerClusterGroup chunkedLoading maxClusterRadius={42} showCoverageOnHover={false}>
                     {data.map((point) => (
-                        <Marker key={point.id} position={[point.lat, point.lng]} icon={createStationIcon(point, activeLayer, isDark)}>
+                        <Marker key={point.id} position={[point.lat, point.lng]} icon={createStationIcon(point, activeLayer, isDark, showLabel)}>
                             <Popup className={isDark ? 'custom-popup-dark' : 'custom-popup-light'}>
                                 <div className="p-1 min-w-[160px]">
                                     <p className={`font-black text-sm uppercase mb-2 border-b pb-1 ${isDark ? 'border-[#2a2d33] text-white' : 'border-gray-200 text-gray-900'}`}>
@@ -200,8 +237,7 @@ export default function InteractiveMap({ data, isLoading = false, error = null, 
                     Updating viewport...
                 </div>
             )}
-            
-            {/* MapLegend không cần truyền isDark nữa */}
+
             <MapLegend activeLayer={activeLayer} />
         </div>
     );

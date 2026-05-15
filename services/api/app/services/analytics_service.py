@@ -12,9 +12,9 @@ from services.api.app.core.cache import get_redis
 from services.api.app.core.database import get_supabase
 from services.api.app.services.weather_provider import fetch_current_enrichment
 
-VIETNAM_COUNTRY = "Vietnam"
+VIETNAM_COUNTRY = "Viet Nam"
 FEATURE_COLS = ["temperature", "aqi", "rain"]
-AQI_CACHE_TTL = 900   # 15 min per-city AQI
+AQI_CACHE_TTL = 900
 WEATHER_LOOKBACK_DAYS = 30
 AQI_FETCH_WORKERS = 16
 AQI_FETCH_TIMEOUT = 4
@@ -68,7 +68,7 @@ def _fetch_latest_weather(city_ids: list[int]) -> dict[int, dict]:
 
 
 def _fetch_aqi_batch(city_rows: list[dict]) -> dict[int, float | None]:
-    """Fetch AQI for each city, using Redis cache where available."""
+    """Fetch AQI for each city from Open-Meteo, using Redis cache where available."""
     cache = get_redis()
     result: dict[int, float | None] = {}
     to_fetch: list[dict] = []
@@ -98,7 +98,7 @@ def _fetch_aqi_batch(city_rows: list[dict]) -> dict[int, float | None]:
 
 
 def fetch_city_feature_rows(scope_mode: str) -> list[dict]:
-    """Return merged rows: city + latest weather + realtime AQI."""
+    """Return merged rows: city + latest weather from DB + real-time AQI."""
     cities = _fetch_cities(scope_mode)
     if not cities:
         return []

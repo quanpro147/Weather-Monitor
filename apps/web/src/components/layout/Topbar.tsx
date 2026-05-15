@@ -3,10 +3,11 @@ import { useGlobalFilter, type DateRangePreset, type ScopeMode } from '../../hoo
 import { useTheme } from '../../contexts/ThemeContext';
 import { listCities } from '../../services/city.service';
 import type { City } from '../../types/city';
+import { formatLastUpdatedDate, formatTimeInTimezone, getTimezoneAbbr, getTimezoneForCountry } from '../../utils/timezone';
 
 export default function Topbar() {
     const { isDark, toggleTheme } = useTheme();
-    const { cityId, setCityId, scopeMode, setScopeMode, dateRangePreset, setDateRangePreset } = useGlobalFilter();
+    const { cityId, setCityId, scopeMode, setScopeMode, dateRangePreset, setDateRangePreset, lastUpdatedDate } = useGlobalFilter();
     const [cities, setCities] = useState<City[]>([]);
     const [loadingCities, setLoadingCities] = useState(false);
     const [selectedCountry, setSelectedCountry] = useState<string>('');
@@ -84,18 +85,17 @@ export default function Topbar() {
         return cities.filter((c) => c.country === selectedCountry);
     }, [cities, scopeMode, selectedCountry]);
 
+    const selectedCity = React.useMemo(
+        () => cities.find(c => c.city_id === cityId) ?? null,
+        [cities, cityId]
+    );
+    const timezone = getTimezoneForCountry(selectedCity?.country);
+    const tzAbbr = React.useMemo(() => getTimezoneAbbr(timezone), [timezone]);
+
     const handleCountryChange = (country: string) => {
         setSelectedCountry(country);
         const first = cities.find((c) => c.country === country);
         setCityId(first ? first.city_id : null);
-    };
-
-    // Format giờ: HH:mm:ss
-    const formatTime = (date: Date) => {
-        const h = String(date.getHours()).padStart(2, '0');
-        const m = String(date.getMinutes()).padStart(2, '0');
-        const s = String(date.getSeconds()).padStart(2, '0');
-        return `${h}:${m}:${s}`;
     };
 
     return (
@@ -115,11 +115,17 @@ export default function Topbar() {
 
             {/* Right Area: Clock & Controls */}
             <div className="flex items-center gap-4">
-                {/* Real-time Clock */}
+                {/* Real-time Clock + Last Updated */}
                 {mounted && (
                     <div className="hidden lg:flex items-center gap-2 text-gray-600 dark:text-[#9ca3af] font-mono text-sm font-semibold bg-gray-50 dark:bg-[#1a1d21] px-3 py-1.5 rounded-lg border border-gray-200 dark:border-[#2a2d33] shadow-sm">
                         <i className="fa-regular fa-clock text-cyan-600 dark:text-cyan-400"></i>
-                        <span>{formatTime(time)} <span className="text-[10px] font-sans font-bold text-gray-400 ml-0.5">ICT</span></span>
+                        <span>{formatTimeInTimezone(time, timezone)} <span className="text-[10px] font-sans font-bold text-gray-400 ml-0.5">{tzAbbr}</span></span>
+                        {lastUpdatedDate && (
+                            <span className="text-[10px] font-sans font-medium text-gray-400 dark:text-[#6b7280] border-l border-gray-200 dark:border-[#2a2d33] pl-2 ml-0.5 flex items-center gap-1">
+                                <i className="fa-regular fa-calendar-check text-cyan-500/70"></i>
+                                {formatLastUpdatedDate(lastUpdatedDate)}
+                            </span>
+                        )}
                     </div>
                 )}
 

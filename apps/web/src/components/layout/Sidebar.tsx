@@ -72,18 +72,6 @@ export default function Sidebar() {
                 })}
             </div>
 
-            {/* Footer */}
-            <div className="p-4 border-t border-gray-200 dark:border-[#2a2d33]">
-                <div className="w-full flex items-center justify-between px-3 py-2.5 bg-gray-50 dark:bg-[#1a1d21] border border-gray-200 dark:border-[#2a2d33] rounded-xl transition-colors">
-                    <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                        <span className="text-[10px] font-bold text-gray-700 dark:text-[#d1d5db] uppercase tracking-wider">System Online</span>
-                    </div>
-                    <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/30">
-                        Stable
-                    </span>
-                </div>
-            </div>
         </div>
     );
 }

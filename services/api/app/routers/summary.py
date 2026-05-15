@@ -81,24 +81,24 @@ def get_summary(city_id: int):
 
     # 6. Gọi AI sinh tóm tắt — truyền đủ 30 ngày để stats chính xác
     try:
-        summary_text = generate_weather_summary(city_name, weather_res.data, recent_anomalies)
+        summary_text, provider_label = generate_weather_summary(city_name, weather_res.data, recent_anomalies)
     except Exception as exc:
-        print(f"[summary] Gemini call failed for city_id={city_id}: {exc}")
+        print(f"[summary] Summary generation failed for city_id={city_id}: {exc}")
         fallback = SummaryResponse(
             city_name=city_name,
-            summary_text="Unable to generate an AI summary at this time. Please refer to the detailed charts.",
-            provider="Gemini 2.5 Flash",
+            summary_text="Unable to generate a summary at this time. Please refer to the detailed charts.",
+            provider="Unavailable",
             period_days=len(weather_res.data),
             anomaly_count=len(recent_anomalies),
             trend_direction=trend.get("direction", "stable"),
         )
         return ApiResponse(success=True, data=fallback)
 
-    # 7. Chuẩn bị response và lưu Cache (chỉ cache khi AI thành công)
+    # 7. Chuẩn bị response và lưu Cache
     response_data = SummaryResponse(
         city_name=city_name,
         summary_text=summary_text,
-        provider="Gemini 2.5 Flash",
+        provider=provider_label,
         period_days=len(weather_res.data),
         anomaly_count=len(recent_anomalies),
         trend_direction=trend.get("direction", "stable"),

@@ -100,18 +100,7 @@ export default function Topbar() {
 
     return (
         <header className="h-[64px] w-full bg-white dark:bg-[#16181c] border-b border-gray-200 dark:border-[#2a2d33] px-6 flex items-center justify-between shrink-0 transition-colors duration-300">
-            {/* Left Area: Title & LIVE Indicator */}
-            <div className="flex items-center gap-4">
-                <div>
-                    <h1 className="text-lg font-black text-gray-900 dark:text-[#f3f4f6] leading-none tracking-tight">Command Center</h1>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-[#8b949e] mt-1.5">National Surveillance</p>
-                </div>
-                
-                <div className="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20">
-                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
-                    <span className="text-[9px] font-black text-emerald-600 dark:text-emerald-400 tracking-[0.2em]">LIVE</span>
-                </div>
-            </div>
+            <div></div>
 
             {/* Right Area: Clock & Controls */}
             <div className="flex items-center gap-4">

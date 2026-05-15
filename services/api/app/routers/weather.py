@@ -200,10 +200,13 @@ def get_current_weather_bulk(
 
     db = get_supabase()
 
+    # Limit to recent 30 days — we only need the latest row per city for current weather.
+    bulk_cutoff = (datetime.date.today() - datetime.timedelta(days=30)).isoformat()
     weather_resp = _execute_with_retry(
         db.table("weather_daily")
         .select("*")
         .in_("city_id", sorted_ids)
+        .gte("date", bulk_cutoff)
         .order("date", desc=True)
     )
 

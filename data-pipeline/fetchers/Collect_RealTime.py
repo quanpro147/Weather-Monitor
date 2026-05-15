@@ -1,3 +1,4 @@
+import logging
 import os
 import time
 import datetime
@@ -5,6 +6,17 @@ import pandas as pd
 import requests
 from dotenv import load_dotenv
 from supabase import create_client
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+logger = logging.getLogger(__name__)
+
+_TRANSIENT_ERRORS = (
+    requests.exceptions.ConnectionError,
+    requests.exceptions.Timeout,
+    requests.exceptions.ChunkedEncodingError,
+)
+_MAX_RETRIES = 3
+_RETRY_BACKOFF = (1.0, 5.0, 15.0)
 
 load_dotenv()
 
@@ -36,6 +48,7 @@ def setup_cities(cities_df: pd.DataFrame) -> None:
             "longitude": float(row["Longitude"]),
         })
     supabase.table("cities").upsert(cities_data, on_conflict="city_id").execute()
+    logger.info("Upserted %d cities", len(cities_data))
 
 
 def get_city_latest_dates() -> dict[int, datetime.date]:
@@ -64,6 +77,7 @@ def fetch_and_save_city(city_id: int, city_name: str, lat: float, lon: float,
         "timezone": "GMT",
     }
 
+    attempt = 0
     while True:
         try:
             response = requests.get(url, params=params, timeout=30)
@@ -71,8 +85,9 @@ def fetch_and_save_city(city_id: int, city_name: str, lat: float, lon: float,
             if response.status_code == 429:
                 reason = response.json().get("reason", "")
                 wait = 3600 if "Hourly" in reason else 60
-                print(f"-> Rate limit. Chờ {wait}s cho {city_name}...")
+                logger.warning("Rate limit for %s. Waiting %ds...", city_name, wait)
                 time.sleep(wait)
+                attempt = 0  # rate-limit sleep is not a retry — reset counter
                 continue
 
             response.raise_for_status()
@@ -81,7 +96,7 @@ def fetch_and_save_city(city_id: int, city_name: str, lat: float, lon: float,
             daily = data.get("daily", {})
             dates = daily.get("time", [])
             if not dates:
-                print(f"No data for {city_name}")
+                logger.warning("No data returned for %s (%s – %s)", city_name, start_date, end_date)
                 return False
 
             def get_val(key: str, idx: int):
@@ -121,11 +136,28 @@ def fetch_and_save_city(city_id: int, city_name: str, lat: float, lon: float,
                     on_conflict="city_id,date"
                 ).execute()
 
-            print(f"Saved {len(records)} records for {city_name}")
+            logger.info("Saved %d records for %s", len(records), city_name)
             return True
 
-        except Exception as e:
-            print(f"Error fetching {city_name}: {e}")
+        except _TRANSIENT_ERRORS as e:
+            if attempt < _MAX_RETRIES - 1:
+                wait = _RETRY_BACKOFF[attempt]
+                logger.warning(
+                    "Transient error for %s (attempt %d/%d), retrying in %.0fs: %s",
+                    city_name, attempt + 1, _MAX_RETRIES, wait, e,
+                )
+                time.sleep(wait)
+                attempt += 1
+            else:
+                logger.error("Giving up on %s after %d attempts: %s", city_name, _MAX_RETRIES, e)
+                return False
+
+        except requests.exceptions.HTTPError as e:
+            logger.error("HTTP error for %s [%d]: %s", city_name, response.status_code, e)
+            return False
+
+        except (ValueError, KeyError) as e:
+            logger.error("Data parsing error for %s: %s", city_name, e)
             return False
 
 
@@ -145,7 +177,7 @@ def _print_date_summary(label: str, city_latest_dates: dict[int, datetime.date],
 
 
 def main() -> None:
-    print(f"[{datetime.datetime.now()}] Starting data collection...")
+    logger.info("Starting data collection...")
 
     csv_path = os.path.join(os.path.dirname(__file__), "cities_1500.csv")
     cities_df = pd.read_csv(csv_path)
@@ -165,7 +197,7 @@ def main() -> None:
     )
 
     if not needs_update:
-        print(f"[{datetime.datetime.now()}] Dữ liệu đã mới nhất. Bỏ qua.")
+        logger.info("Data is up to date. Skipping.")
         return
 
     fetched = 0
@@ -182,9 +214,9 @@ def main() -> None:
                 continue
             start_date = latest_date + datetime.timedelta(days=1)
         else:
-            start_date = datetime.date(2020, 1, 1)
+            start_date = datetime.date(2024, 1, 1)
 
-        print(f"Fetching {row['City']} ({city_id}) from {start_date} to {end_date}")
+        logger.info("Fetching %s (%d) from %s to %s", row["City"], city_id, start_date, end_date)
         ok = fetch_and_save_city(city_id, row["City"], row["Latitude"], row["Longitude"],
                                  start_date, end_date)
         if ok:
@@ -193,12 +225,12 @@ def main() -> None:
             errors += 1
         time.sleep(0.8)
 
-    print(f"\n[{datetime.datetime.now()}] Run summary: fetched={fetched}, skipped={skipped}, errors={errors}")
+    logger.info("Run summary: fetched=%d, skipped=%d, errors=%d", fetched, skipped, errors)
 
     final_dates = get_city_latest_dates()
     _print_date_summary("AFTER", final_dates, total_cities)
 
-    print(f"[{datetime.datetime.now()}] Finished data collection.")
+    logger.info("Finished data collection.")
 
 
 if __name__ == "__main__":

@@ -11,7 +11,8 @@ from services.api.app.models.common import ApiResponse
 
 router = APIRouter(prefix="/anomaly", tags=["anomaly"])
 
-CACHE_TTL = 21600  # 6h — historical data doesn't change
+CACHE_TTL = 21600    # 6h — historical data doesn't change
+HISTORY_YEARS = 3    # training window for Isolation Forest
 
 
 @router.get("/{city_id}", response_model=ApiResponse[list[AnomalyRecord]])
@@ -32,12 +33,14 @@ def get_anomalies(
 
     db = get_supabase()
 
-    # Fetch full history for the city — the model needs enough context to learn
-    # what "normal" looks like before scoring the requested window
+    # Limit training data to HISTORY_YEARS before end_date — enough for Isolation Forest
+    # to learn seasonal norms without fetching the entire table.
+    history_cutoff = (end_date - datetime.timedelta(days=HISTORY_YEARS * 365)).isoformat()
     response = (
         db.table("weather_daily")
         .select("*")
         .eq("city_id", city_id)
+        .gte("date", history_cutoff)
         .order("date")
         .execute()
     )

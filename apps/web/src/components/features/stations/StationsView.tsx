@@ -1,16 +1,24 @@
 import React from 'react';
 import useSWR from 'swr';
 import { useTheme } from '../../../contexts/ThemeContext';
+import { useGlobalFilter } from '../../../hooks/useGlobalFilter';
 import { listCities } from '../../../services/city.service';
 import type { City } from '../../../types/city';
 
 export default function StationsView() {
     const { isDark } = useTheme();
+    const { scopeMode } = useGlobalFilter();
     const [search, setSearch] = React.useState('');
 
     const { data: cities, isLoading, error } = useSWR<City[]>(
-        'stations:cities:vietnam',
-        () => listCities({ country: 'Vietnam', limit: 200 }),
+        `stations:cities:${scopeMode}`,
+        async () => {
+            if (scopeMode === 'vietnam') {
+                const data = await listCities({ country: 'Viet Nam', limit: 200 });
+                return data.length > 0 ? data : listCities({ country: 'Vietnam', limit: 200 });
+            }
+            return listCities({ limit: 1000 });
+        },
     );
 
     const filtered = React.useMemo(() => {
@@ -35,7 +43,7 @@ export default function StationsView() {
                 <div>
                     <h2 className={`text-xl font-black tracking-tight ${text}`}>Station Management</h2>
                     <p className={`text-xs font-medium mt-1 ${subtext}`}>
-                        Monitoring stations across Vietnam
+                        {scopeMode === 'global' ? 'Monitoring stations worldwide' : 'Monitoring stations across Vietnam'}
                     </p>
                 </div>
                 <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold ${isDark ? 'bg-emerald-950 border-emerald-800 text-emerald-400' : 'bg-emerald-50 border-emerald-200 text-emerald-700'}`}>

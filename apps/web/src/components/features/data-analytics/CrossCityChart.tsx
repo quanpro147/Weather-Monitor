@@ -10,7 +10,11 @@ import {
 } from 'recharts';
 import useSWR from 'swr';
 import { useTheme } from '../../../contexts/ThemeContext';
+import { useGlobalFilter } from '../../../hooks/useGlobalFilter';
 import { getCrossCity } from '../../../services/analytics.service';
+import ChartSkeleton from '../../common/ChartSkeleton';
+import EmptyState from '../../common/EmptyState';
+import { getTooltipStyles } from '../../../utils/chartStyles';
 
 type MetricKey = 'temp' | 'aqi' | 'rain';
 
@@ -50,9 +54,14 @@ const metricConfig: Record<
 export default function CrossCityChart() {
 	const [metric, setMetric] = React.useState<MetricKey>('aqi');
 	const { isDark } = useTheme();
+	const { scopeMode } = useGlobalFilter();
 	const config = metricConfig[metric];
+	const tooltipStyles = getTooltipStyles(isDark);
 
-	const { data, isLoading, error } = useSWR('analytics:cross-city:vietnam', () => getCrossCity('vietnam'));
+	const { data, isLoading, error } = useSWR(
+		['analytics:cross-city', scopeMode],
+		() => getCrossCity(scopeMode),
+	);
 
 	const cities = data?.cities ?? [];
 	const minChartWidth = Math.max(640, cities.length * 120);
@@ -92,20 +101,16 @@ export default function CrossCityChart() {
 			</div>
 
 			{isLoading && (
-				<div className={`flex h-[300px] items-center justify-center text-xs ${isDark ? 'text-gray-600' : 'text-gray-400'}`}>
-					Loading…
-				</div>
+				<ChartSkeleton className="h-[300px]" />
 			)}
 
 			{(error || (!isLoading && cities.length === 0)) && (
-				<div className={`flex h-[300px] items-center justify-center text-xs ${isDark ? 'text-gray-600' : 'text-gray-400'}`}>
-					No data available
-				</div>
+				<EmptyState message="No data available" className="h-[300px]" />
 			)}
 
 			{!isLoading && !error && cities.length > 0 && (
-				<div className="w-full overflow-x-auto no-scrollbar">
-					<div style={{ minWidth: `${minChartWidth}px`, height: '300px' }}>
+				<div className="w-full overflow-x-auto custom-scrollbar snap-x snap-mandatory">
+					<div className="snap-start" style={{ minWidth: `${minChartWidth}px`, height: '300px' }}>
 						<ResponsiveContainer width="100%" height="100%">
 							<BarChart data={cities} margin={{ top: 8, right: 12, left: -16, bottom: 4 }} barCategoryGap="18%" barGap={2}>
 								<defs>
@@ -130,13 +135,10 @@ export default function CrossCityChart() {
 								/>
 								<Tooltip
 									cursor={{ fill: isDark ? '#1f2937' : '#e2e8f0', opacity: 0.35 }}
-									contentStyle={{
-										backgroundColor: isDark ? '#0f1115' : '#ffffff',
-										border: `1px solid ${isDark ? '#2a2a2a' : '#e2e8f0'}`,
-										borderRadius: '8px',
-										color: isDark ? '#e5e7eb' : '#0f172a',
-										fontSize: '11px',
-									}}
+									contentStyle={tooltipStyles.contentStyle}
+									itemStyle={tooltipStyles.itemStyle}
+									labelStyle={tooltipStyles.labelStyle}
+									wrapperStyle={tooltipStyles.wrapperStyle}
 									formatter={(value: number) => [`${value} ${config.unit}`.trim(), config.label]}
 								/>
 								<Bar dataKey={metric} fill={`url(#${config.gradientId})`} barSize={44} radius={[4, 4, 0, 0]} />

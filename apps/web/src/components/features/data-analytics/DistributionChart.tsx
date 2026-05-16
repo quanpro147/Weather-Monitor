@@ -10,11 +10,20 @@ import {
 } from 'recharts';
 import useSWR from 'swr';
 import { useTheme } from '../../../contexts/ThemeContext';
+import { useGlobalFilter } from '../../../hooks/useGlobalFilter';
 import { getHistogram } from '../../../services/analytics.service';
+import ChartSkeleton from '../../common/ChartSkeleton';
+import EmptyState from '../../common/EmptyState';
+import { getTooltipStyles } from '../../../utils/chartStyles';
 
 export default function DistributionChart() {
 	const { isDark } = useTheme();
-	const { data, isLoading, error } = useSWR('analytics:histogram:vietnam', () => getHistogram('vietnam', 2.0));
+	const { scopeMode } = useGlobalFilter();
+	const tooltipStyles = getTooltipStyles(isDark);
+	const { data, isLoading, error } = useSWR(
+		['analytics:histogram', scopeMode],
+		() => getHistogram(scopeMode, 2.0),
+	);
 
 	const bins = data?.bins ?? [];
 
@@ -26,15 +35,11 @@ export default function DistributionChart() {
 			</div>
 
 			{isLoading && (
-				<div className={`flex h-[300px] items-center justify-center text-xs ${isDark ? 'text-gray-600' : 'text-gray-400'}`}>
-					Loading…
-				</div>
+				<ChartSkeleton className="h-[300px]" />
 			)}
 
 			{(error || (!isLoading && bins.length === 0)) && (
-				<div className={`flex h-[300px] items-center justify-center text-xs ${isDark ? 'text-gray-600' : 'text-gray-400'}`}>
-					No data available
-				</div>
+				<EmptyState message="No data available" className="h-[300px]" />
 			)}
 
 			{!isLoading && !error && bins.length > 0 && (
@@ -66,13 +71,10 @@ export default function DistributionChart() {
 						/>
 						<Tooltip
 							cursor={{ fill: isDark ? '#1f2937' : '#e2e8f0', opacity: 0.35 }}
-							contentStyle={{
-								backgroundColor: isDark ? '#0f1115' : '#ffffff',
-								border: `1px solid ${isDark ? '#2a2a2a' : '#e2e8f0'}`,
-								borderRadius: '8px',
-								color: isDark ? '#e5e7eb' : '#0f172a',
-								fontSize: '11px',
-							}}
+							contentStyle={tooltipStyles.contentStyle}
+							itemStyle={tooltipStyles.itemStyle}
+							labelStyle={tooltipStyles.labelStyle}
+							wrapperStyle={tooltipStyles.wrapperStyle}
 							formatter={(value: number) => [value, 'Frequency']}
 						/>
 						<Bar dataKey="count" fill="url(#histogramGrad)" radius={[0, 0, 0, 0]} stroke={isDark ? '#0f172a' : '#ffffff'} strokeWidth={1} />

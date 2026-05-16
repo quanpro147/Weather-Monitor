@@ -1,5 +1,7 @@
 # Weather Monitor (Giám Sát Thời Tiết)
 
+**[Live Demo trên Vercel](https://weather-monitor-[URL].vercel.app)** <!-- TODO: cập nhật link Vercel thực -->
+
 Weather Monitor là hệ thống giám sát và phân tích thời tiết thông minh cho lãnh thổ Việt Nam, triển khai dưới dạng Web Dashboard tương tác.
 
 Dự án tập trung vào 4 mục tiêu chính:

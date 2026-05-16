@@ -52,32 +52,35 @@ export default function AnomalyTimeline({ records }: AnomalyTimelineProps) {
     }
 
     return (
-        <div className="space-y-5 max-h-[350px] overflow-y-auto no-scrollbar pl-2 pt-2">
-            {anomalyEvents.map((event, idx) => (
-                <div key={`${event.date}-${idx}`} className={`relative pl-6 pb-2 border-l-2 ${isDark ? 'border-gray-800' : 'border-gray-200'} last:border-0`}>
-                    
-                    {/* Nút tròn Timeline - Style lại chuẩn SCADA */}
-                    <div className={`absolute -left-[9px] top-0 w-4 h-4 rounded-full flex items-center justify-center ${isDark ? 'bg-[#1e1e1e]' : 'bg-white'}`}>
-                        <div className="w-2 h-2 rounded-full bg-red-500 ring-4 ring-red-500/20 animate-pulse"></div>
-                    </div>
-                    
-                    <div className={`p-3 rounded-xl border ${isDark ? 'bg-[#151515] border-[#2a2d33]' : 'bg-gray-50 border-gray-200'}`}>
-                        <div className="flex justify-between items-center mb-1">
-                            <span className="text-[10px] font-black text-red-500 uppercase tracking-widest">{event.type}</span>
-                            <span className={`text-[9px] font-bold ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>{event.date}</span>
+        <div className="relative">
+            <div className="space-y-5 max-h-[350px] overflow-y-auto no-scrollbar pl-2 pt-2 pr-2">
+                {anomalyEvents.map((event, idx) => (
+                    <div key={`${event.date}-${idx}`} className={`relative pl-6 pb-2 border-l-2 ${isDark ? 'border-gray-800' : 'border-gray-200'} last:border-0`}>
+                        
+                        {/* Nút tròn Timeline - Style lại chuẩn SCADA */}
+                        <div className={`absolute -left-[9px] top-0 w-4 h-4 rounded-full flex items-center justify-center ${isDark ? 'bg-[#1e1e1e]' : 'bg-white'}`}>
+                            <div className="w-2 h-2 rounded-full bg-red-500 ring-4 ring-red-500/20 animate-pulse"></div>
                         </div>
+                        
+                        <div className={`p-3 rounded-xl border ${isDark ? 'bg-[#151515] border-[#2a2d33]' : 'bg-gray-50 border-gray-200'}`}>
+                            <div className="flex justify-between items-center mb-1">
+                                <span className="text-[10px] font-black text-red-500 uppercase tracking-widest">{event.type}</span>
+                                <span className={`text-[9px] font-bold ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>{event.date}</span>
+                            </div>
 
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${isDark ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20' : 'bg-cyan-50 text-cyan-600 border border-cyan-200'}`}>
-                            Anomaly Score: {event.score.toFixed(3)}
-                        </span>
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${isDark ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20' : 'bg-cyan-50 text-cyan-600 border border-cyan-200'}`}>
+                                Anomaly Score: {event.score.toFixed(3)}
+                            </span>
 
-                        <p className={`text-[10px] font-medium leading-relaxed ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                            <span className="text-gray-500 font-bold mr-1">xAI Explanation:</span>
-                            {event.reason}
-                        </p>
+                            <p className={`text-[10px] font-medium leading-relaxed ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                <span className="text-gray-500 font-bold mr-1">xAI Explanation:</span>
+                                {event.reason}
+                            </p>
+                        </div>
                     </div>
-                </div>
-            ))}
+                ))}
+            </div>
+            <div className={`pointer-events-none absolute bottom-0 left-0 h-8 w-full ${isDark ? 'bg-gradient-to-t from-[#151515] to-transparent' : 'bg-gradient-to-t from-gray-50 to-transparent'}`} />
         </div>
     );
 }

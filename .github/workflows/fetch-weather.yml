@@ -1,8 +1,8 @@
-name: Hourly Weather Fetch
+name: Daily Weather Fetch
 
 on:
   schedule:
-    - cron: '0 * * * *'   # mỗi giờ (UTC)
+    - cron: '0 0 * * *'   # mỗi ngày lúc 00:00 UTC
   workflow_dispatch:        # nút chạy thủ công trên GitHub UI
 
 jobs:

@@ -14,6 +14,9 @@ import useSWR from 'swr';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useGlobalFilter } from '../../../hooks/useGlobalFilter';
 import { getWeatherHistory } from '../../../services/weather.service';
+import ChartSkeleton from '../../common/ChartSkeleton';
+import EmptyState from '../../common/EmptyState';
+import { getTooltipStyles } from '../../../utils/chartStyles';
 
 interface ChartPoint {
 	date: string;
@@ -31,6 +34,7 @@ function formatDate(iso: string): string {
 export default function TrendChart() {
 	const { isDark } = useTheme();
 	const { cityId, startDate, endDate } = useGlobalFilter();
+	const tooltipStyles = getTooltipStyles(isDark);
 
 	const swrKey = cityId !== null ? `trend:${cityId}:${startDate}:${endDate}` : null;
 
@@ -54,14 +58,6 @@ export default function TrendChart() {
 
 	const axisStyle = { fill: isDark ? '#94a3b8' : '#64748b', fontSize: 11 };
 	const gridStroke = isDark ? '#334155' : '#cbd5e1';
-	const tooltipStyle = {
-		backgroundColor: isDark ? '#0f1115' : '#ffffff',
-		border: `1px solid ${isDark ? '#2a2a2a' : '#e2e8f0'}`,
-		borderRadius: '8px',
-		color: isDark ? '#e5e7eb' : '#0f172a',
-		fontSize: '11px',
-	};
-
 	return (
 		<section className={`rounded-xl border p-5 shadow-sm ${isDark ? 'border-[#2a2a2a] bg-[#151515]' : 'border-gray-200 bg-white'}`}>
 			<div className="mb-5">
@@ -74,21 +70,15 @@ export default function TrendChart() {
 			</div>
 
 			{cityId === null && (
-				<div className={`flex h-[280px] items-center justify-center text-xs ${isDark ? 'text-gray-600' : 'text-gray-400'}`}>
-					Select a city to view the trend chart
-				</div>
+				<EmptyState message="Select a city to view the trend chart" className="h-[280px]" />
 			)}
 
 			{cityId !== null && isLoading && (
-				<div className={`flex h-[280px] items-center justify-center text-xs ${isDark ? 'text-gray-600' : 'text-gray-400'}`}>
-					Loading…
-				</div>
+				<ChartSkeleton className="h-[280px]" />
 			)}
 
 			{cityId !== null && (error || (!isLoading && chartData.length === 0)) && (
-				<div className={`flex h-[280px] items-center justify-center text-xs ${isDark ? 'text-gray-600' : 'text-gray-400'}`}>
-					No data available for the selected period
-				</div>
+				<EmptyState message="No data available for the selected period" className="h-[280px]" />
 			)}
 
 			{cityId !== null && !isLoading && !error && chartData.length > 0 && (
@@ -132,7 +122,10 @@ export default function TrendChart() {
 						/>
 
 						<Tooltip
-							contentStyle={tooltipStyle}
+							contentStyle={tooltipStyles.contentStyle}
+							itemStyle={tooltipStyles.itemStyle}
+							labelStyle={tooltipStyles.labelStyle}
+							wrapperStyle={tooltipStyles.wrapperStyle}
 							cursor={{ fill: isDark ? '#1f2937' : '#e2e8f0', opacity: 0.25 }}
 							formatter={(value: number, name: string) => {
 								const labels: Record<string, string> = {
@@ -157,7 +150,8 @@ export default function TrendChart() {
 									tMin: 'Min °C',
 									rain: 'Rain mm',
 								};
-								return labels[value] ?? value;
+								const label = labels[value] ?? value;
+								return <span style={{ color: isDark ? '#94a3b8' : '#64748b' }}>{label}</span>;
 							}}
 						/>
 

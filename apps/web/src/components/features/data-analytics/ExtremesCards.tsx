@@ -1,7 +1,10 @@
 import React from 'react';
 import useSWR from 'swr';
 import { useTheme } from '../../../contexts/ThemeContext';
+import { useGlobalFilter } from '../../../hooks/useGlobalFilter';
 import { getExtremes } from '../../../services/analytics.service';
+import ChartSkeleton from '../../common/ChartSkeleton';
+import EmptyState from '../../common/EmptyState';
 
 const cards = [
 	{
@@ -35,17 +38,19 @@ const cards = [
 
 export default function ExtremesCards() {
 	const { isDark } = useTheme();
-	const { data, isLoading, error } = useSWR('analytics:extremes:vietnam', () => getExtremes('vietnam'));
+	const { scopeMode } = useGlobalFilter();
+	const { data, isLoading, error } = useSWR(
+		['analytics:extremes', scopeMode],
+		() => getExtremes(scopeMode),
+	);
 
 	if (isLoading) {
 		return (
 			<section className="grid grid-cols-1 gap-4 md:grid-cols-3">
 				{cards.map((card) => (
-					<div
+					<ChartSkeleton
 						key={card.key}
-						className={`h-28 animate-pulse rounded-xl border border-l-4 ${card.accentClass} ${
-							isDark ? 'border-[#2a2a2a] bg-[#151515]' : 'border-gray-200 bg-white'
-						}`}
+						className={`h-28 border-l-4 ${card.accentClass}`}
 					/>
 				))}
 			</section>
@@ -55,17 +60,7 @@ export default function ExtremesCards() {
 	if (error || !data) {
 		return (
 			<section className="grid grid-cols-1 gap-4 md:grid-cols-3">
-				{cards.map((card) => (
-					<article
-						key={card.key}
-						className={`rounded-xl border border-l-4 ${card.accentClass} p-4 shadow-sm ${
-							isDark ? 'border-[#2a2a2a] bg-[#151515]' : 'border-gray-200 bg-white'
-						}`}
-					>
-						<p className={`text-[10px] font-bold uppercase tracking-widest ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>{card.label}</p>
-						<p className={`mt-2 text-sm font-semibold ${isDark ? 'text-gray-600' : 'text-gray-400'}`}>No data</p>
-					</article>
-				))}
+				<EmptyState message="No data available" className="h-28 md:col-span-3" />
 			</section>
 		);
 	}

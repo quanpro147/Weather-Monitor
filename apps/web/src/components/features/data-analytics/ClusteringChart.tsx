@@ -12,18 +12,24 @@ import {
 } from 'recharts';
 import useSWR from 'swr';
 import { useTheme } from '../../../contexts/ThemeContext';
+import { useGlobalFilter } from '../../../hooks/useGlobalFilter';
 import { getClustering } from '../../../services/analytics.service';
 import type { ClusterPoint, ClusterProfile } from '../../../types/analytics';
+import ChartSkeleton from '../../common/ChartSkeleton';
+import EmptyState from '../../common/EmptyState';
+import { getGlassTooltipClassName, getTooltipStyles } from '../../../utils/chartStyles';
 
 const DEFAULT_K = 3;
 
 export default function ClusteringChart() {
     const { isDark } = useTheme();
+    const { scopeMode } = useGlobalFilter();
     const [k, setK] = React.useState(DEFAULT_K);
+    const tooltipStyles = getTooltipStyles(isDark);
 
     const { data, isLoading, error } = useSWR(
-        `analytics:clustering:vietnam:k=${k}`,
-        () => getClustering('vietnam', k),
+        ['analytics:clustering', scopeMode, k],
+        () => getClustering(scopeMode, k),
     );
 
     const points: ClusterPoint[] = data?.points ?? [];
@@ -51,13 +57,7 @@ export default function ClusteringChart() {
                 : `Vùng tương đồng (${nearbyStations.length} trạm)`;
 
             return (
-                <div
-                    className={`rounded-xl border px-3 py-2 shadow-lg backdrop-blur-sm ${
-                        isDark
-                            ? 'border-white/10 bg-[#0f1115]/80 text-gray-100'
-                            : 'border-gray-200/80 bg-white/80 text-gray-900'
-                    }`}
-                >
+                <div className={getGlassTooltipClassName(isDark)}>
                     <p className="mb-1 text-sm font-black" style={{ color: profile.color }}>
                         {denseCluster ? denseTitle : pt.city}
                     </p>
@@ -118,15 +118,11 @@ export default function ClusteringChart() {
             </div>
 
             {isLoading && (
-                <div className={`flex h-[340px] items-center justify-center text-xs ${isDark ? 'text-gray-600' : 'text-gray-400'}`}>
-                    Loading…
-                </div>
+                <ChartSkeleton className="h-[340px]" />
             )}
 
             {(error || (!isLoading && points.length === 0)) && (
-                <div className={`flex h-[340px] items-center justify-center text-xs ${isDark ? 'text-gray-600' : 'text-gray-400'}`}>
-                    No data available
-                </div>
+                <EmptyState message="No data available" className="h-[340px]" />
             )}
 
             {!isLoading && !error && points.length > 0 && (
@@ -170,7 +166,11 @@ export default function ClusteringChart() {
                                         tickLine={false}
                                     />
                                     <ZAxis type="number" dataKey="aqi" range={[80, 260]} />
-                                    <Tooltip content={<CustomTooltip />} cursor={{ strokeDasharray: '3 3', strokeOpacity: 0.2 }} />
+                                    <Tooltip
+                                        content={<CustomTooltip />}
+                                        cursor={{ strokeDasharray: '3 3', strokeOpacity: 0.2 }}
+                                        wrapperStyle={tooltipStyles.wrapperStyle}
+                                    />
 
                                     <Scatter data={points} name="K-Means clusters">
                                         {points.map((point) => (

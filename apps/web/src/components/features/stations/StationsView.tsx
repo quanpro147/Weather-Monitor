@@ -78,7 +78,7 @@ export default function StationsView() {
                 </div>
 
                 {/* Body */}
-                <div className={`overflow-y-auto flex-1 divide-y ${divider}`}>
+                <div className={`overflow-y-auto flex-1 divide-y pr-2 custom-scrollbar ${divider}`}>
                     {isLoading && (
                         <div className={`flex flex-col items-center justify-center h-[300px] gap-3 ${subtext}`}>
                             <i className="fa-solid fa-circle-notch fa-spin text-2xl text-cyan-500" />

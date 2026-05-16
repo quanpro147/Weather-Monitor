@@ -33,6 +33,10 @@ SUPABASE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+# Ngày bắt đầu mặc định cho city chưa có data trong DB.
+# Chỉ dùng khi city_id không có bất kỳ record nào — không phải khi RPC lỗi.
+_DEFAULT_START_DATE = datetime.date(2024, 1, 1)
+
 DAILY_VARS = [
     "weather_code", "temperature_2m_max", "temperature_2m_min", "rain_sum",
     "shortwave_radiation_sum", "temperature_2m_mean", "wind_direction_10m_dominant",
@@ -60,11 +64,37 @@ def setup_cities(cities_df: pd.DataFrame) -> None:
 
 
 def get_city_latest_dates() -> dict[int, datetime.date]:
-    # Dùng RPC để GROUP BY city_id lấy MAX(date) — hiệu quả hơn lấy toàn bảng
-    result = supabase.rpc("get_city_latest_dates", {}).execute()
-    if result.data:
-        return {row["city_id"]: datetime.date.fromisoformat(row["max_date"]) for row in result.data}
-    return {}
+    """
+    Lấy MAX(date) per city từ DB qua Supabase RPC.
+    Trả về empty dict nếu RPC lỗi — caller phải handle case này
+    bằng cách log warning, không được silently fallback về start_date cũ.
+    """
+    try:
+        result = supabase.rpc("get_city_latest_dates", {}).execute()
+    except Exception as exc:
+        logger.error(
+            "RPC get_city_latest_dates failed — cannot determine latest dates. "
+            "Ensure the function exists in Supabase (run infra/supabase/schema.sql). Error: %s",
+            exc,
+        )
+        raise  # Propagate — caller should not silently use empty dict as incremental baseline
+
+    if not result.data:
+        logger.warning(
+            "get_city_latest_dates returned no rows — DB may be empty or RPC returned NULL. "
+            "All cities will be fetched from the default start date."
+        )
+        return {}
+
+    latest: dict[int, datetime.date] = {}
+    for row in result.data:
+        if row.get("max_date") is None:
+            logger.warning("city_id=%s has NULL max_date in RPC result — skipping.", row.get("city_id"))
+            continue
+        latest[row["city_id"]] = datetime.date.fromisoformat(row["max_date"])
+
+    logger.info("Retrieved latest dates for %d cities from DB.", len(latest))
+    return latest
 
 
 def _float(val) -> float | None:
@@ -210,6 +240,43 @@ def _print_date_summary(label: str, city_latest_dates: dict[int, datetime.date],
     print('='*50)
 
 
+def _build_fetch_queue(
+    cities_df: pd.DataFrame,
+    city_latest_dates: dict[int, datetime.date],
+    today: datetime.date,
+) -> list[tuple]:
+    """
+    Trả về danh sách (city_id, city_name, lat, lon, start_date, lag_days) sắp xếp theo:
+    1. Incremental (lag 2-365 ngày) — trễ nhất lên đầu, fetch nhanh
+    2. Bulk (lag > 365 ngày hoặc chưa có data) — xuống cuối, fetch chậm
+    City up-to-date (lag < 2 ngày) bị bỏ qua.
+    """
+    incremental: list[tuple] = []
+    bulk: list[tuple] = []
+
+    for _, row in cities_df.iterrows():
+        city_id = int(row["ID"])
+        latest_date = city_latest_dates.get(city_id)
+
+        if latest_date is None:
+            start_date = _DEFAULT_START_DATE
+            lag = (today - start_date).days
+            bulk.append((city_id, row["City"], row["Latitude"], row["Longitude"], start_date, lag))
+        else:
+            lag = (today - latest_date).days
+            if lag < 2:
+                continue  # up-to-date
+            start_date = latest_date + datetime.timedelta(days=1)
+            if lag > 365:
+                bulk.append((city_id, row["City"], row["Latitude"], row["Longitude"], start_date, lag))
+            else:
+                incremental.append((city_id, row["City"], row["Latitude"], row["Longitude"], start_date, lag))
+
+    incremental.sort(key=lambda x: x[5], reverse=True)
+    bulk.sort(key=lambda x: x[5], reverse=True)
+    return incremental + bulk
+
+
 def main() -> None:
     logger.info("Starting data collection...")
 
@@ -220,44 +287,39 @@ def main() -> None:
     setup_cities(cities_df)
 
     end_date = datetime.date.today() - datetime.timedelta(days=1)
+    today = datetime.date.today()
     city_latest_dates = get_city_latest_dates()
 
     _print_date_summary("BEFORE", city_latest_dates, total_cities)
 
-    needs_update = any(
-        not city_latest_dates.get(int(row["ID"])) or
-        (datetime.date.today() - city_latest_dates[int(row["ID"])]).days >= 2
-        for _, row in cities_df.iterrows()
-    )
-
-    if not needs_update:
+    queue = _build_fetch_queue(cities_df, city_latest_dates, today)
+    if not queue:
         logger.info("Data is up to date. Skipping.")
         return
 
+    logger.info(
+        "Fetch queue: %d cities to update (incremental first, bulk last).",
+        len(queue),
+    )
+
     fetched = 0
-    skipped = 0
+    skipped = total_cities - len(queue)
     errors = 0
 
-    for _, row in cities_df.iterrows():
-        city_id = int(row["ID"])
-        latest_date = city_latest_dates.get(city_id)
-
-        if latest_date:
-            if (datetime.date.today() - latest_date).days < 2:
-                skipped += 1
-                continue
-            start_date = latest_date + datetime.timedelta(days=1)
-        else:
-            start_date = datetime.date(2024, 1, 1)
-
-        logger.info("Fetching %s (%d) from %s to %s", row["City"], city_id, start_date, end_date)
-        ok = fetch_and_save_city(city_id, row["City"], row["Latitude"], row["Longitude"],
-                                 start_date, end_date)
+    for i, (city_id, city_name, lat, lon, start_date, lag_days) in enumerate(queue, 1):
+        logger.info(
+            "[%d/%d] Fetching %s (%d) from %s to %s (lag %d days)",
+            i, len(queue), city_name, city_id, start_date, end_date, lag_days,
+        )
+        ok = fetch_and_save_city(city_id, city_name, lat, lon, start_date, end_date)
         if ok:
             fetched += 1
         else:
             errors += 1
-        time.sleep(0.8)
+
+        # Incremental fetch (small date range) = ít traffic hơn → sleep ngắn hơn.
+        sleep_s = 0.3 if lag_days <= 30 else 0.8
+        time.sleep(sleep_s)
 
     logger.info("Run summary: fetched=%d, skipped=%d, errors=%d", fetched, skipped, errors)
 

@@ -152,31 +152,3 @@ python scripts/migrate_to_supabase.py
 Pipeline (`data-pipeline/fetchers/Collect_RealTime.py`) tự động chạy mỗi ngày — nếu dữ liệu thời tiết bị trễ từ 2 ngày trở lên, nó sẽ tự động gọi Open-Meteo API lấy dữ liệu mới nhất. Chạy 24/7 qua Docker (`weather-data-pipeline` container).
 
 Để kiểm tra dữ liệu hoặc thao tác DB thủ công: dùng Jupyter Notebook `se.ipynb` trong `data-pipeline/fetchers/`.
-
-## 5) Vai Trò Team (4 người)
-
-1. Data Engineer
-- Xây dựng luồng crawler cho WAQI/Open-Meteo.
-- Clean và chuẩn hóa dữ liệu.
-- Đẩy dữ liệu vào Database tự động theo lịch (Cron/Schedule).
-
-2. Backend Engineer
-- Xây dựng API và tích hợp Redis cache.
-- Quản lý Database.
-- Dockerize và deploy lên server.
-
-3. AI/Data Analyst
-- Phân tích dữ liệu thời tiết (EDA).
-- Xây dựng mô hình cảnh báo dị thường (Anomaly detection).
-- Viết prompt cho AI tạo weather summary.
-
-4. Frontend Developer
-- Xây dựng UI responsive.
-- Tích hợp bản đồ và vẽ biểu đồ.
-- Hiển thị cảnh báo và tóm tắt AI.
-
-## 6) Tình Trạng Hiện Tại
-- Đã hoàn thiện toàn bộ Data Pipeline ngầm tự động thu thập và bổ sung dữ liệu Thời tiết Việt Nam bằng Docker.
-- Config tối ưu loại bỏ lặp dữ liệu, giảm tải API Request bằng thư viện `requests` nguyên bản giúp Data được cào nhanh hơn rất nhiều.
-- Database đã được dịch chuyển thành công sang nền tảng **Supabase Cloud**, giúp cả nhóm dễ dàng chia sẻ dữ liệu mà không cần phải chạy local. Đã tạo script giúp anh em đồng bộ tự động `scripts/migrate_to_supabase.py`.
-- Sẵn sàng bứt tốc cho team để phát triển song song các phần API / Web.

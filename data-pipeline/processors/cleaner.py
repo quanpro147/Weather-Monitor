@@ -34,6 +34,7 @@ WEATHER_NUMERIC_COLS = [
     "cloud_cover_max",
     "cloud_cover_min",
     "cloud_cover_mean",
+    "aqi",
 ]
 
 # Hard physical bounds — values outside these are physically impossible and should be nulled
@@ -54,6 +55,7 @@ PHYSICAL_BOUNDS: dict[str, tuple[float, float]] = {
     "cloud_cover_max":             (  0.0,  100.0),
     "cloud_cover_min":             (  0.0,  100.0),
     "cloud_cover_mean":            (  0.0,  100.0),
+    "aqi":                         (  0.0,  500.0),
 }
 
 

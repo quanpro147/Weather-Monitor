@@ -45,6 +45,41 @@ DAILY_VARS = [
     "cloud_cover_min", "cloud_cover_mean", "wind_speed_10m_mean", "wind_gusts_10m_mean"
 ]
 
+_AQI_URL = "https://air-quality-api.open-meteo.com/v1/air-quality"
+
+
+def _fetch_aqi_daily(lat: float, lon: float,
+                     start_date: datetime.date, end_date: datetime.date) -> dict[str, int | None]:
+    """
+    Fetch daily mean AQI (European AQI scale) from Open-Meteo Air Quality API.
+    Aggregates hourly european_aqi values into a per-day integer mean.
+    Returns {date_str: aqi_int} — empty dict on any failure (caller treats missing as NULL).
+    """
+    params = {
+        "latitude": lat,
+        "longitude": lon,
+        "hourly": "european_aqi",
+        "start_date": start_date.strftime("%Y-%m-%d"),
+        "end_date": end_date.strftime("%Y-%m-%d"),
+        "timezone": "GMT",
+    }
+    try:
+        resp = requests.get(_AQI_URL, params=params, timeout=30)
+        resp.raise_for_status()
+        hourly = resp.json().get("hourly", {})
+        times = hourly.get("time", [])
+        aqi_vals = hourly.get("european_aqi", [])
+
+        daily: dict[str, list[int]] = {}
+        for t, val in zip(times, aqi_vals):
+            if val is not None:
+                daily.setdefault(t[:10], []).append(int(val))
+
+        return {d: round(sum(v) / len(v)) for d, v in daily.items()}
+    except Exception as exc:
+        logger.warning("AQI fetch failed for lat=%.4f lon=%.4f: %s", lat, lon, exc)
+        return {}
+
 
 def setup_cities(cities_df: pd.DataFrame) -> None:
     cities_data = []
@@ -163,6 +198,8 @@ def fetch_and_save_city(city_id: int, city_name: str, lat: float, lon: float,
                 logger.warning("No data returned for %s (%s – %s)", city_name, start_date, end_date)
                 return False
 
+            aqi_by_date = _fetch_aqi_daily(lat, lon, start_date, end_date)
+
             def get_val(key: str, idx: int):
                 arr = daily.get(key, [])
                 return arr[idx] if idx < len(arr) else None
@@ -190,6 +227,7 @@ def fetch_and_save_city(city_id: int, city_name: str, lat: float, lon: float,
                     "cloud_cover_max": _float(get_val("cloud_cover_max", i)),
                     "cloud_cover_min": _float(get_val("cloud_cover_min", i)),
                     "cloud_cover_mean": _float(get_val("cloud_cover_mean", i)),
+                    "aqi": aqi_by_date.get(date_str),
                 })
 
             # Upsert theo batch 500 records

@@ -41,6 +41,9 @@ CREATE TABLE IF NOT EXISTS public.weather_daily (
     cloud_cover_min            DECIMAL(5, 2) CHECK (cloud_cover_min  BETWEEN 0.0 AND 100.0),
     cloud_cover_mean           DECIMAL(5, 2) CHECK (cloud_cover_mean BETWEEN 0.0 AND 100.0),
 
+    -- Chất lượng không khí (European AQI scale, 0–500)
+    aqi                        SMALLINT      CHECK (aqi BETWEEN 0 AND 500),
+
     UNIQUE (city_id, date)
 );
 
@@ -121,6 +124,11 @@ BEGIN
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_cloud_mean' AND conrelid = 'public.weather_daily'::regclass) THEN
         ALTER TABLE public.weather_daily ADD CONSTRAINT chk_cloud_mean CHECK (cloud_cover_mean IS NULL OR cloud_cover_mean BETWEEN 0.0 AND 100.0);
+    END IF;
+
+    -- weather_daily: aqi
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_aqi' AND conrelid = 'public.weather_daily'::regclass) THEN
+        ALTER TABLE public.weather_daily ADD CONSTRAINT chk_aqi CHECK (aqi IS NULL OR aqi BETWEEN 0 AND 500);
     END IF;
 END $$;
 

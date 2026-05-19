@@ -6,11 +6,11 @@ Supports multiple API keys for quota rotation:
 When a key hits 429 (quota exceeded), the next key is tried automatically.
 If all keys are exhausted, a rule-based summary is returned from the raw data.
 
-The prompt is structured to produce a proper meteorologist-style insight:
-  1. Overall trend characterisation (warming / cooling / stable, wet / dry)
-  2. Notable extremes or anomalies with concrete numbers
-  3. Pattern interpretation (why this might be happening)
-  4. Practical outlook / recommendation for the next few days
+The prompt is structured to answer the four most important analytical questions:
+  1. Xu hướng chính (Main trend)
+  2. Pattern đáng chú ý (Notable patterns)
+  3. Dự đoán / giải thích (Prediction / explanation)
+  4. Giá trị thực tế (Practical insight)
 """
 
 import os
@@ -19,34 +19,42 @@ from typing import List
 
 import google.generativeai as genai
 
-WEATHER_PROMPT_TEMPLATE = """
-You are a senior meteorologist producing a data-driven insight report for {city_name}, Vietnam.
+# ── Prompt template (Vietnamese, strict structure) ─────────────────────────────
+WEATHER_PROMPT_TEMPLATE = """\
+Bạn là một chuyên gia khí tượng học đang viết báo cáo phân tích dữ liệu thời tiết \
+cho {city_name}, Việt Nam. Báo cáo dành cho hệ thống giám sát thời tiết chuyên nghiệp.
 
-=== STATISTICAL CONTEXT (last {period_days} days) ===
-Temperature:
-  - Mean: {temp_mean}°C  |  Max: {temp_max}°C  |  Min: {temp_min}°C
-  - Trend: {trend_direction} ({slope_str})
-Rainfall:
-  - Total: {rain_total}mm over the period
-  - Rainy days (>1mm): {rainy_days} of {period_days}
-Humidity: avg {humidity_mean}%
-Wind: max {wind_max} km/h
+=== DỮ LIỆU THỐNG KÊ ({period_days} ngày gần nhất) ===
+Nhiệt độ:
+  - Trung bình: {temp_mean}°C  |  Cao nhất: {temp_max}°C  |  Thấp nhất: {temp_min}°C
+  - Xu hướng: {trend_direction} ({slope_str})
+Lượng mưa:
+  - Tổng: {rain_total}mm trong kỳ
+  - Ngày mưa (>1mm): {rainy_days}/{period_days} ngày
+Độ ẩm: trung bình {humidity_mean}%
+Gió: tối đa {wind_max} km/h
 
-=== DAILY RECORDS (most recent 7 days) ===
+=== DỮ LIỆU 7 NGÀY GẦN NHẤT ===
 {weather_data}
 
-=== ANOMALY FLAGS ===
+=== CÁC BẤT THƯỜNG PHÁT HIỆN ===
 {anomaly_data}
 
-Write a structured insight report in English with exactly these four parts — no headers, no bullet points, no filler phrases:
+Viết báo cáo insight BẰNG TIẾNG VIỆT, trả lời ĐÚNG 4 câu hỏi sau, mỗi câu một dòng, \
+không dùng header, không dùng bullet, không dùng markdown:
 
-1. TREND: One sentence characterising the dominant pattern (temperature direction + rainfall pattern).
-2. EVENTS: One sentence calling out the most notable event or anomaly with the specific date and measured value.
-3. INTERPRETATION: One sentence explaining WHY this pattern is likely occurring (seasonal context, regional factors).
-4. OUTLOOK: One practical sentence advising what residents or planners should expect or prepare for in the coming days.
+1. XU HƯỚNG: Xu hướng chính của dữ liệu là gì? (nhiệt độ + lượng mưa, kèm số liệu cụ thể)
+2. PATTERN: Có pattern hoặc điểm bất thường đáng chú ý nào? (nêu ngày và giá trị đo được)
+3. DỰ ĐOÁN: Có thể dự đoán hoặc giải thích điều gì từ dữ liệu này? (lý do mùa vụ/địa lý)
+4. THỰC TẾ: Insight có giá trị thực tế gì? (khuyến nghị cụ thể cho người dân hoặc đơn vị quản lý)
 
-Be specific and data-driven. Quote actual numbers. Do not use phrases like "Overall", "It is worth noting", "In summary".
+Yêu cầu: dùng số liệu thực, không dùng mở đầu chung chung như "Nhìn chung" hay "Tóm lại". \
+Toàn bộ báo cáo PHẢI bằng tiếng Việt.
 """
+
+# Confidence score thresholds
+CONFIDENCE_HIGH_MIN_RECORDS = 20
+CONFIDENCE_MEDIUM_MIN_RECORDS = 10
 
 
 def _load_gemini_keys() -> List[str]:
@@ -84,13 +92,13 @@ def _compute_stats(records: List[dict]) -> dict:
         slope = numerator / denominator if denominator else 0.0
 
     if slope > 0.05:
-        direction = "warming"
+        direction = "ấm dần"
     elif slope < -0.05:
-        direction = "cooling"
+        direction = "mát dần"
     else:
-        direction = "stable"
+        direction = "ổn định"
 
-    slope_str = f"{slope:+.2f}°C/day" if abs(slope) >= 0.01 else "no significant change"
+    slope_str = f"{slope:+.2f}°C/ngày" if abs(slope) >= 0.01 else "không thay đổi đáng kể"
 
     return {
         "temp_mean": round(statistics.mean(temps), 1) if temps else "N/A",
@@ -105,25 +113,57 @@ def _compute_stats(records: List[dict]) -> dict:
     }
 
 
+def _compute_confidence(record_count: int, anomaly_count: int, provider: str) -> dict:
+    """
+    Compute a confidence metadata dict for the summary.
+
+    Returns:
+        level: "high" | "medium" | "low"
+        score: 0–100
+        reason: human-readable explanation
+    """
+    if provider == "Rule-based":
+        return {"level": "low", "score": 35, "reason": "Không kết nối được AI — dùng công thức thống kê thay thế."}
+
+    if record_count >= CONFIDENCE_HIGH_MIN_RECORDS:
+        base = 85
+        level = "high"
+        reason = f"Đủ dữ liệu ({record_count} ngày) để phân tích xu hướng đáng tin cậy."
+    elif record_count >= CONFIDENCE_MEDIUM_MIN_RECORDS:
+        base = 65
+        level = "medium"
+        reason = f"Dữ liệu vừa đủ ({record_count} ngày) — kết quả tương đối tin cậy."
+    else:
+        base = 45
+        level = "low"
+        reason = f"Ít dữ liệu ({record_count} ngày) — phân tích có thể chưa đầy đủ."
+
+    # Anomalies presence adds slight confidence that the signal is real
+    if anomaly_count > 0:
+        base = min(base + 5, 95)
+
+    return {"level": level, "score": base, "reason": reason}
+
+
 def _rule_based_summary(city_name: str, stats: dict, period_days: int, anomaly_count: int) -> str:
-    """Generate a data-driven summary without an LLM when all API keys are exhausted."""
+    """Generate a Vietnamese data-driven summary without an LLM when all API keys are exhausted."""
     direction_phrases = {
-        "warming": f"a warming trend ({stats['slope_str']})",
-        "cooling": f"a cooling trend ({stats['slope_str']})",
-        "stable": "stable temperatures",
+        "ấm dần": f"xu hướng ấm dần ({stats['slope_str']})",
+        "mát dần": f"xu hướng mát dần ({stats['slope_str']})",
+        "ổn định": "nhiệt độ ổn định",
     }
-    trend_phrase = direction_phrases.get(stats["trend_direction"], "stable temperatures")
+    trend_phrase = direction_phrases.get(stats["trend_direction"], "nhiệt độ ổn định")
     anomaly_note = (
-        f"{anomaly_count} statistically unusual event(s) were detected during this period."
+        f"Phát hiện {anomaly_count} sự kiện bất thường về mặt thống kê trong kỳ này."
         if anomaly_count
-        else "No significant anomalies were detected."
+        else "Không phát hiện bất thường đáng kể."
     )
     return (
-        f"Over the past {period_days} days, {city_name} recorded {trend_phrase} "
-        f"with a mean of {stats['temp_mean']}°C "
-        f"(max {stats['temp_max']}°C / min {stats['temp_min']}°C). "
-        f"Total rainfall was {stats['rain_total']} mm across {stats['rainy_days']} rainy days, "
-        f"with average humidity at {stats['humidity_mean']}% and peak winds of {stats['wind_max']} km/h. "
+        f"Trong {period_days} ngày qua, {city_name} ghi nhận {trend_phrase}, "
+        f"nhiệt độ trung bình {stats['temp_mean']}°C "
+        f"(cao nhất {stats['temp_max']}°C / thấp nhất {stats['temp_min']}°C). "
+        f"Tổng lượng mưa đạt {stats['rain_total']} mm trong {stats['rainy_days']} ngày mưa, "
+        f"độ ẩm trung bình {stats['humidity_mean']}%, gió mạnh nhất {stats['wind_max']} km/h. "
         f"{anomaly_note}"
     )
 
@@ -132,44 +172,44 @@ def generate_weather_summary(
     city_name: str,
     recent_records: List[dict],
     anomaly_records: List[dict],
-) -> tuple[str, str]:
+) -> tuple[str, str, dict]:
     """
-    Generate a structured 4-sentence weather insight, rotating through Gemini keys on quota errors.
+    Generate a structured Vietnamese weather insight, rotating through Gemini keys on quota errors.
 
     Returns
     -------
-    (summary_text, provider_label)
-      provider_label is "Gemini 2.5 Flash" on success or "Rule-based" when all keys fail.
+    (summary_text, provider_label, confidence)
+      provider_label: "Gemini 2.5 Flash" on success or "Rule-based" when all keys fail.
+      confidence: dict with keys level, score, reason
     """
     keys = _load_gemini_keys()
     if not keys:
         stats = _compute_stats(recent_records)
-        return (
-            _rule_based_summary(city_name, stats, len(recent_records), len(anomaly_records)),
-            "Rule-based",
-        )
+        text = _rule_based_summary(city_name, stats, len(recent_records), len(anomaly_records))
+        confidence = _compute_confidence(len(recent_records), len(anomaly_records), "Rule-based")
+        return text, "Rule-based", confidence
 
     stats = _compute_stats(recent_records)
     period_days = len(recent_records)
 
     last_7 = sorted(recent_records, key=lambda r: r["date"])[-7:]
     weather_str = "\n".join(
-        f"  {r['date']}: avg {r.get('temperature_2m_mean', 'N/A')}°C "
+        f"  {r['date']}: tb {r.get('temperature_2m_mean', 'N/A')}°C "
         f"(max {r.get('temperature_2m_max', 'N/A')}°C / min {r.get('temperature_2m_min', 'N/A')}°C), "
-        f"rain {r.get('rain_sum', '0')}mm, "
-        f"wind {r.get('wind_speed_10m_max', '0')}km/h, "
-        f"humidity {r.get('relative_humidity_2m_mean', 'N/A')}%"
+        f"mưa {r.get('rain_sum', '0')}mm, "
+        f"gió {r.get('wind_speed_10m_max', '0')}km/h, "
+        f"độ ẩm {r.get('relative_humidity_2m_mean', 'N/A')}%"
         for r in last_7
     )
 
     anomaly_str = (
         "\n".join(
-            f"  {r['date']}: anomaly score {r.get('anomaly_score', 0):.2f} — "
-            f"flagged as statistically unusual"
+            f"  {r['date']}: điểm bất thường {r.get('anomaly_score', 0):.2f} — "
+            f"được xác định là ngoại lệ thống kê"
             for r in anomaly_records
         )
         if anomaly_records
-        else "  No significant anomalies detected in this period."
+        else "  Không phát hiện bất thường đáng kể trong kỳ này."
     )
 
     prompt = WEATHER_PROMPT_TEMPLATE.format(
@@ -195,7 +235,9 @@ def generate_weather_summary(
             genai.configure(api_key=key)
             model = genai.GenerativeModel("gemini-2.5-flash")
             response = model.generate_content(prompt)
-            return response.text.strip(), "Gemini 2.5 Flash"
+            text = response.text.strip()
+            confidence = _compute_confidence(period_days, len(anomaly_records), "Gemini 2.5 Flash")
+            return text, "Gemini 2.5 Flash", confidence
         except Exception as exc:
             if _is_quota_error(exc):
                 quota_errors.append(key_label)
@@ -204,7 +246,6 @@ def generate_weather_summary(
             raise RuntimeError(f"Gemini API call failed: {exc}") from exc
 
     print(f"[summary] All Gemini keys exhausted ({', '.join(quota_errors)}), using rule-based fallback.")
-    return (
-        _rule_based_summary(city_name, stats, period_days, len(anomaly_records)),
-        "Rule-based",
-    )
+    text = _rule_based_summary(city_name, stats, period_days, len(anomaly_records))
+    confidence = _compute_confidence(period_days, len(anomaly_records), "Rule-based")
+    return text, "Rule-based", confidence

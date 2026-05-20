@@ -65,7 +65,7 @@ def _fetch_aqi_daily(
 
 
 def _get_cities_needing_backfill(client: Client) -> list[dict]:
-    result = client.rpc("get_cities_needing_aqi_backfill").execute()
+    result = client.rpc("get_cities_needing_aqi_backfill").range(0, 9999).execute()
     return result.data or []
 
 

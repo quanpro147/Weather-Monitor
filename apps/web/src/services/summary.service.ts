@@ -7,6 +7,10 @@ export interface SummaryPayload {
 	period_days: number;
 	anomaly_count: number;
 	trend_direction: 'warming' | 'cooling' | 'stable';
+	// Confidence metadata (added in this update)
+	confidence_level: 'high' | 'medium' | 'low';
+	confidence_score: number;   // 0–100
+	confidence_reason: string;
 }
 
 type SummaryApiResponse = {

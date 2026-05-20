@@ -144,6 +144,64 @@ AS $$
     GROUP BY city_id;
 $$;
 
+-- Trả về các city có ít nhất 1 row aqi IS NULL — dùng bởi backfill_aqi.py.
+CREATE OR REPLACE FUNCTION public.get_cities_needing_aqi_backfill()
+RETURNS TABLE(
+    city_id    INTEGER,
+    city       VARCHAR(255),
+    latitude   DECIMAL(10, 7),
+    longitude  DECIMAL(10, 7),
+    null_count BIGINT,
+    min_date   DATE,
+    max_date   DATE
+)
+LANGUAGE sql
+SECURITY DEFINER
+AS $$
+    SELECT
+        w.city_id,
+        c.city,
+        c.latitude,
+        c.longitude,
+        COUNT(*)        AS null_count,
+        MIN(w.date)     AS min_date,
+        MAX(w.date)     AS max_date
+    FROM public.weather_daily w
+    JOIN public.cities c USING (city_id)
+    WHERE w.aqi IS NULL
+    GROUP BY w.city_id, c.city, c.latitude, c.longitude;
+$$;
+
+-- Cập nhật aqi cho một batch rows (city_id, date, aqi).
+-- Chỉ update rows có aqi IS NULL để không ghi đè dữ liệu tốt.
+-- Trả về số rows thực sự được update.
+CREATE OR REPLACE FUNCTION public.update_aqi_batch(updates JSONB)
+RETURNS INTEGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    updated_count INTEGER;
+BEGIN
+    WITH incoming AS (
+        SELECT
+            (elem->>'city_id')::INTEGER  AS city_id,
+            (elem->>'date')::DATE        AS date,
+            (elem->>'aqi')::SMALLINT     AS aqi
+        FROM jsonb_array_elements(updates) AS elem
+    )
+    UPDATE public.weather_daily w
+    SET    aqi = i.aqi
+    FROM   incoming i
+    WHERE  w.city_id = i.city_id
+      AND  w.date    = i.date
+      AND  w.aqi     IS NULL;
+
+    GET DIAGNOSTICS updated_count = ROW_COUNT;
+    RETURN updated_count;
+END;
+$$;
+
 -- ── Data retention policy ─────────────────────────────────────────────────────
 -- Keep rolling 900 days (~2.5 years) so year-over-year comparison is always available.
 -- One-time cleanup: DELETE FROM public.weather_daily WHERE date < '2024-01-01';

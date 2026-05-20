@@ -75,7 +75,7 @@ def _fetch_aqi_daily(lat: float, lon: float,
             if val is not None:
                 daily.setdefault(t[:10], []).append(int(val))
 
-        return {d: round(sum(v) / len(v)) for d, v in daily.items()}
+        return {d: min(round(sum(v) / len(v)), 500) for d, v in daily.items()}
     except Exception as exc:
         logger.warning("AQI fetch failed for lat=%.4f lon=%.4f: %s", lat, lon, exc)
         return {}

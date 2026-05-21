@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
 import MarkerClusterGroup from 'react-leaflet-cluster';
@@ -158,6 +158,25 @@ function ZoomTracker({ onZoom }: { onZoom: (z: number) => void }) {
     return null;
 }
 
+function MapGetter({ mapRef }: { mapRef: React.MutableRefObject<L.Map | null> }) {
+    const map = useMap();
+    useEffect(() => { mapRef.current = map; }, [map]);
+    return null;
+}
+
+function MapFlyTo({ target }: { target: [number, number] | null }) {
+    const map = useMap();
+    const prevKeyRef = useRef<string>('');
+    useEffect(() => {
+        if (!target) return;
+        const key = `${target[0]}:${target[1]}`;
+        if (key === prevKeyRef.current) return;
+        prevKeyRef.current = key;
+        map.flyTo(target, Math.max(map.getZoom(), 8), { duration: 1.2 });
+    }, [target, map]);
+    return null;
+}
+
 export default function InteractiveMap({ data, isLoading = false, error = null, activeLayer = 'aqi', scopeMode = 'vietnam', onViewportChange }: InteractiveMapProps) {
     const { isDark } = useTheme();
 
@@ -170,6 +189,33 @@ export default function InteractiveMap({ data, isLoading = false, error = null, 
     const mapKey = `${scopeMode}-${isDark ? 'dark' : 'light'}`;
 
     const [currentZoom, setCurrentZoom] = useState(mapZoom);
+    const mapRef = useRef<L.Map | null>(null);
+    const [flyTarget, setFlyTarget] = useState<[number, number] | null>(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [showDropdown, setShowDropdown] = useState(false);
+    const searchContainerRef = useRef<HTMLDivElement>(null);
+
+    const searchResults = useMemo(() => {
+        if (!searchQuery.trim()) return [];
+        const q = searchQuery.toLowerCase();
+        return data.filter((p) => p.city.toLowerCase().includes(q)).slice(0, 8);
+    }, [searchQuery, data]);
+
+    useEffect(() => {
+        const handler = (e: MouseEvent) => {
+            if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
+                setShowDropdown(false);
+            }
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, []);
+
+    const handleSelectCity = (point: MapDataPoint) => {
+        setFlyTarget([point.lat, point.lng]);
+        setSearchQuery(point.city);
+        setShowDropdown(false);
+    };
 
     useEffect(() => {
         setCurrentZoom(mapZoom);
@@ -193,6 +239,8 @@ export default function InteractiveMap({ data, isLoading = false, error = null, 
                 attributionControl={false}
             >
                 <MapResizer />
+                <MapGetter mapRef={mapRef} />
+                <MapFlyTo target={flyTarget} />
                 <ViewportObserver onViewportChange={onViewportChange} />
                 <ZoomTracker onZoom={setCurrentZoom} />
 
@@ -238,6 +286,84 @@ export default function InteractiveMap({ data, isLoading = false, error = null, 
                     Updating viewport...
                 </div>
             )}
+
+            {/* City search box — top right */}
+            <div ref={searchContainerRef} className="absolute top-3 right-3 z-[500] w-52">
+                <div className="relative">
+                    <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => { setSearchQuery(e.target.value); setShowDropdown(true); }}
+                        onFocus={() => { if (searchQuery.trim()) setShowDropdown(true); }}
+                        placeholder="Search city..."
+                        className={`w-full pl-8 pr-7 py-1.5 text-xs rounded-lg border outline-none backdrop-blur-md transition-colors ${
+                            isDark
+                                ? 'bg-[#1e1e1e]/90 border-[#2a2a2a] text-gray-200 placeholder-gray-500 focus:border-teal-500'
+                                : 'bg-white/90 border-gray-200 text-gray-800 placeholder-gray-400 focus:border-teal-500'
+                        }`}
+                    />
+                    <i className="fa-solid fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none" />
+                    {searchQuery && (
+                        <button
+                            onClick={() => { setSearchQuery(''); setShowDropdown(false); }}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                        >
+                            <i className="fa-solid fa-xmark text-[10px]" />
+                        </button>
+                    )}
+                </div>
+                {showDropdown && searchResults.length > 0 && (
+                    <div className={`absolute top-full mt-1 w-full rounded-lg border shadow-lg overflow-hidden ${
+                        isDark ? 'bg-[#1e1e1e] border-[#2a2a2a]' : 'bg-white border-gray-200'
+                    }`}>
+                        {searchResults.map((point) => (
+                            <button
+                                key={point.id}
+                                onClick={() => handleSelectCity(point)}
+                                className={`w-full text-left px-3 py-1.5 text-xs transition-colors flex items-center gap-2 ${
+                                    isDark ? 'text-gray-300 hover:bg-white/5' : 'text-gray-700 hover:bg-gray-50'
+                                }`}
+                            >
+                                <i className="fa-solid fa-location-dot text-teal-500 text-[10px] shrink-0" />
+                                {point.city}
+                            </button>
+                        ))}
+                    </div>
+                )}
+                {showDropdown && searchQuery.trim() && searchResults.length === 0 && (
+                    <div className={`absolute top-full mt-1 w-full rounded-lg border shadow-lg px-3 py-2 text-xs ${
+                        isDark ? 'bg-[#1e1e1e] border-[#2a2a2a] text-gray-500' : 'bg-white border-gray-200 text-gray-400'
+                    }`}>
+                        No cities found
+                    </div>
+                )}
+            </div>
+
+            {/* Zoom controls — bottom right */}
+            <div className="absolute bottom-3 right-3 z-[500] flex flex-col gap-1">
+                <button
+                    onClick={() => mapRef.current?.zoomIn()}
+                    title="Zoom in"
+                    className={`w-7 h-7 rounded-lg border flex items-center justify-center text-base font-bold leading-none transition-colors backdrop-blur-md ${
+                        isDark
+                            ? 'bg-[#1e1e1e]/90 border-[#2a2a2a] text-gray-300 hover:bg-[#2a2a2a] active:scale-95'
+                            : 'bg-white/90 border-gray-200 text-gray-700 hover:bg-gray-50 active:scale-95'
+                    }`}
+                >
+                    +
+                </button>
+                <button
+                    onClick={() => mapRef.current?.zoomOut()}
+                    title="Zoom out"
+                    className={`w-7 h-7 rounded-lg border flex items-center justify-center text-base font-bold leading-none transition-colors backdrop-blur-md ${
+                        isDark
+                            ? 'bg-[#1e1e1e]/90 border-[#2a2a2a] text-gray-300 hover:bg-[#2a2a2a] active:scale-95'
+                            : 'bg-white/90 border-gray-200 text-gray-700 hover:bg-gray-50 active:scale-95'
+                    }`}
+                >
+                    −
+                </button>
+            </div>
 
             <MapLegend activeLayer={activeLayer} />
         </div>

@@ -16,6 +16,7 @@ import { useGlobalFilter } from '../../../hooks/useGlobalFilter';
 import { useAnomalyData } from '../../../hooks/useAnomalyData';
 import { useWeatherData } from '../../../hooks/useWeatherData';
 import { useWeatherClassification } from '../../../hooks/useWeatherClassification';
+import { listCities } from '../../../services/city.service';
 import { getWeatherAdvisory } from '../../../services/weather.service';
 import { getForecast } from '../../../services/forecast.service';
 import type { AdvisoryResponse } from '../../../types/weather';
@@ -40,8 +41,19 @@ export default function InsightsView() {
         return () => clearTimeout(id);
     }, []);
 
-    /* ── Reuse SWR city list cached by StationsView ─────────────────────── */
-    const { data: cities } = useSWR<City[]>(`stations:cities:${scopeMode}`);
+    /* ── City list — share cache key with StationsView but include own fetcher
+         so this page works even when StationsView has never been visited.    */
+    const { data: cities } = useSWR<City[]>(
+        `stations:cities:${scopeMode}`,
+        async () => {
+            if (scopeMode === 'vietnam') {
+                const data = await listCities({ country: 'Viet Nam', limit: 200 });
+                return data.length > 0 ? data : listCities({ country: 'Vietnam', limit: 200 });
+            }
+            return listCities({ limit: 1000 });
+        },
+        { revalidateOnFocus: false, dedupingInterval: 300_000 },
+    );
 
     /* ── Anomaly data ────────────────────────────────────────────────────── */
     const {

@@ -13,12 +13,14 @@ interface CustomDateRange {
 interface GlobalFilterContextValue {
 	cityId: number | null;
 	scopeMode: ScopeMode;
+	selectedCountry: string;
 	dateRangePreset: DateRangePreset;
 	startDate: ISODateString;
 	endDate: ISODateString;
 	lastUpdatedDate: string | null;
 	setCityId: (cityId: number | null) => void;
 	setScopeMode: (mode: ScopeMode) => void;
+	setSelectedCountry: (country: string) => void;
 	setDateRangePreset: (preset: DateRangePreset) => void;
 	setCustomDateRange: (range: CustomDateRange) => void;
 	setLastUpdatedDate: (date: string | null) => void;
@@ -51,6 +53,7 @@ const GlobalFilterContext = createContext<GlobalFilterContextValue | undefined>(
 export function GlobalFilterProvider({ children }: { children: React.ReactNode }) {
 	const [cityId, setCityId] = useState<number | null>(null);
 	const [scopeMode, setScopeMode] = useState<ScopeMode>('vietnam');
+	const [selectedCountry, setSelectedCountry] = useState<string>('');
 	const [dateRangePreset, setDateRangePreset] = useState<DateRangePreset>('7d');
 	const [customDateRange, setCustomDateRangeState] = useState<CustomDateRange | null>(null);
 	const [today, setToday] = useState(() => new Date().toISOString().slice(0, 10));
@@ -79,12 +82,14 @@ export function GlobalFilterProvider({ children }: { children: React.ReactNode }
 	const value: GlobalFilterContextValue = {
 		cityId,
 		scopeMode,
+		selectedCountry,
 		dateRangePreset,
 		startDate: resolvedRange.startDate,
 		endDate: resolvedRange.endDate,
 		lastUpdatedDate,
 		setCityId,
 		setScopeMode,
+		setSelectedCountry,
 		setDateRangePreset,
 		setCustomDateRange,
 		setLastUpdatedDate,

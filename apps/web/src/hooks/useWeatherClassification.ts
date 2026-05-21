@@ -42,7 +42,7 @@ export function useWeatherClassification(cities: City[]): UseWeatherClassificati
     );
 
     const cacheKey = cityIds.length > 0
-        ? `weather:bulk:${cityIds.slice(0, 50).join(',')}`
+        ? `weather:bulk:${cityIds.join(',')}`
         : null;
 
     const { data: bulkWeather, error, isLoading } = useSWR(

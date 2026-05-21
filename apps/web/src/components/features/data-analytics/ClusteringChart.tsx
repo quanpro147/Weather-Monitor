@@ -36,40 +36,36 @@ export default function ClusteringChart() {
     const profiles: ClusterProfile[] = data?.profiles ?? [];
     const clusterColorMap = new Map<number, string>(profiles.map((p) => [p.id, p.color]));
 
-    const nearbyTempThreshold = 1.8;
-    const nearbyAqiThreshold = 18;
-
     const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{ payload: ClusterPoint }> }) => {
         if (active && payload && payload.length) {
             const pt = payload[0].payload;
             const profile = profiles.find((p) => p.id === pt.cluster);
             if (!profile) return null;
 
-            const nearbyStations = points.filter(
-                (item) =>
-                    Math.abs(item.temp - pt.temp) <= nearbyTempThreshold &&
-                    Math.abs(item.aqi - pt.aqi) <= nearbyAqiThreshold,
-            );
-            const denseCluster = nearbyStations.length > 1;
-            const isPollutionCluster = pt.cluster === 0;
+            const clusterStations = points.filter((item) => item.cluster === pt.cluster);
+            const isDense = clusterStations.length > 1;
+            const isPollutionCluster = profile.name.toLowerCase().includes('pollution');
             const denseTitle = isPollutionCluster
-                ? `Vùng ô nhiễm (${nearbyStations.length} trạm)`
-                : `Vùng tương đồng (${nearbyStations.length} trạm)`;
+                ? `Vùng ô nhiễm (${clusterStations.length} trạm)`
+                : `Vùng tương đồng (${clusterStations.length} trạm)`;
+            const MAX_VISIBLE = 6;
+            const visibleCities = clusterStations.slice(0, MAX_VISIBLE).map((s) => s.city).join(', ');
+            const hiddenCount = clusterStations.length - MAX_VISIBLE;
 
             return (
                 <div className={getGlassTooltipClassName(isDark)}>
                     <p className="mb-1 text-sm font-black" style={{ color: profile.color }}>
-                        {denseCluster ? denseTitle : pt.city}
+                        {isDense ? denseTitle : pt.city}
                     </p>
                     <p className={`mb-2 text-[10px] font-bold uppercase tracking-widest ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                         {profile.name}
                     </p>
 
-                    {denseCluster ? (
+                    {isDense ? (
                         <div className="text-xs font-semibold">
-                            <p className="mb-1">Các trạm gần nhau:</p>
+                            <p className="mb-1">Các trạm:</p>
                             <p className={`leading-relaxed ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
-                                {nearbyStations.map((item) => item.city).join(', ')}
+                                {visibleCities}{hiddenCount > 0 ? ` +${hiddenCount} khác` : ''}
                             </p>
                         </div>
                     ) : (

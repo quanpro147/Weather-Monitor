@@ -43,8 +43,6 @@ interface DashboardOverviewProps {
     isDark?: boolean;
 }
 
-type AlertTab = 'live' | 'summary';
-
 type WeatherWithOptionalRealtime = WeatherDaily & {
     aqi?: number | null;
     air_quality_index?: number | null;
@@ -71,39 +69,7 @@ function formatNumber(value: number | null | undefined, digits = 1): string {
     return value.toFixed(digits);
 }
 
-function resolveTempDelta(current: WeatherDaily | null, history: WeatherDaily[]): string {
-    if (!current || history.length < 2) {
-        return 'No trend baseline';
-    }
-
-    const prev = history[history.length - 2]?.temperature_2m_max;
-    const now = current.temperature_2m_max;
-
-    if (prev === null || prev === undefined || now === null || now === undefined) {
-        return 'No trend baseline';
-    }
-
-    const diff = now - prev;
-    const sign = diff >= 0 ? '+' : '';
-    return `${sign}${diff.toFixed(1)}°C vs previous day`;
-}
-
-// Mock Data cho hệ thống AI Insights
-const aiSummaries = [
-    {
-        title: '72-Hour Heat Stress Trend',
-        detail: 'Model projects persistent heat index above 41°C in dense urban zones from 11:00-16:00.',
-        icon: 'fa-brain',
-    },
-    {
-        title: 'AQI Recovery Window',
-        detail: 'Wind corridor pattern suggests AQI can drop below 90 after midnight if rainfall remains > 8mm.',
-        icon: 'fa-wind',
-    },
-];
-
 export default function DashboardOverview({ isDark = true }: DashboardOverviewProps) {
-    const [activeAlertTab, setActiveAlertTab] = useState<AlertTab>('live');
     const [chartReady, setChartReady] = useState(false);
     
     // --- KHAI BÁO STATE CHO TÍNH NĂNG MỚI MÀ NHÁNH FEAT ĐANG THIẾU ---
@@ -334,7 +300,6 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
     const trendData = [...historyData, ...forecastData];
 
     const mainCondition = advisory?.advice_text ?? 'No advisory message available from backend.';
-    const tempTrend = resolveTempDelta(current, history);
 
     return (
         <div className="mx-auto w-full max-w-[1500px] flex flex-col gap-4 animate-in fade-in duration-700">
@@ -410,89 +375,40 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
                 </div>
             </section>
 
-            {/* ROW 2: Explainable Alert & Insight Hub */}
+            {/* ROW 2: Alert */}
             <section className="bg-white dark:bg-[#1e1e1e] border border-gray-200 dark:border-[#2a2a2a] rounded-2xl p-5 shadow-sm">
-                <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
-                    <h3 className="text-sm font-black tracking-widest text-gray-900 dark:text-[#f3f4f6] uppercase">Explainable Alert & Insight Hub</h3>
-
-                    <div className="bg-gray-100 dark:bg-[#151515] border border-gray-200 dark:border-[#2a2a2a] inline-flex rounded-lg p-1">
-                        <button
-                            type="button"
-                            onClick={() => setActiveAlertTab('live')}
-                            className={`rounded-md px-3 py-1.5 text-[10px] font-bold tracking-widest transition-all ${
-                                activeAlertTab === 'live'
-                                    ? 'bg-red-500 text-white shadow-sm'
-                                    : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'
-                            }`}
-                        >
-                            LIVE ALERTS
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setActiveAlertTab('summary')}
-                            className={`rounded-md px-3 py-1.5 text-[10px] font-bold tracking-widest transition-all ${
-                                activeAlertTab === 'summary'
-                                    ? 'bg-cyan-500 text-white shadow-sm'
-                                    : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'
-                            }`}
-                        >
-                            AI SUMMARY
-                        </button>
-                    </div>
+                <div className="mb-4">
+                    <h3 className="text-sm font-black tracking-widest text-gray-900 dark:text-[#f3f4f6] uppercase">Alert</h3>
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                    {activeAlertTab === 'live' ? (
-                        [
-                            {
-                                level: advisory?.risk_level ? advisory.risk_level.toUpperCase() : 'INFO',
-                                title: 'Live Weather Advisory',
-                                reason: advisory?.advice_text ?? 'No advisory available.',
-                                icon: 'fa-bell',
-                                color: 'border-orange-200 dark:border-orange-500/45 bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400',
-                            },
-                            {
-                                level: anomalyCount > 0 ? 'WARNING' : 'NORMAL',
-                                title: 'Anomaly Detection Status',
-                                reason: anomalyCount > 0
-                                    ? `${anomalyCount} anomaly records in selected range ${startDate} -> ${endDate}.`
-                                    : `No anomalies detected in selected range ${startDate} -> ${endDate}.`,
-                                icon: 'fa-triangle-exclamation',
-                                color: anomalyCount > 0 ? 'border-red-200 dark:border-red-500/45 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400' : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/30 text-gray-500 dark:text-gray-400',
-                            },
-                        ].map((alert) => (
-                            <article key={alert.title} className={`rounded-xl border p-4 transition-all hover:scale-[1.01] ${alert.color}`}>
-                                <div className="flex items-center gap-2 mb-1.5">
-                                    <i className={`fa-solid ${alert.icon} text-[10px]`}></i>
-                                    <p className="text-[9px] font-black uppercase tracking-widest leading-none">{alert.level}</p>
-                                </div>
-                                <h4 className="text-xs font-black text-gray-900 dark:text-white leading-tight">{alert.title}</h4>
-                                <p className="mt-1 text-[10px] leading-relaxed opacity-90 font-medium">xAI Reason: {alert.reason}</p>
-                            </article>
-                        ))
-                    ) : (
-                        [
-                            {
-                                title: 'Current Temperature Delta',
-                                detail: tempTrend,
-                                icon: 'fa-temperature-half',
-                            },
-                            {
-                                title: 'AQI / Humidity Signal',
-                                detail: `AQI ${formatNumber(aqi, 0)} | Humidity ${formatNumber(current?.relative_humidity_2m_mean, 0)}% | Rain ${formatNumber(current?.rain_sum)} mm`,
-                                icon: 'fa-wind',
-                            },
-                        ].map((insight) => (
-                            <article key={insight.title} className="rounded-xl border border-cyan-100 dark:border-cyan-500/20 bg-cyan-50/30 dark:bg-cyan-500/5 p-4">
-                                <div className="flex items-center gap-2 mb-1.5 text-cyan-600 dark:text-cyan-400">
-                                    <i className={`fa-solid ${insight.icon} text-[10px]`}></i>
-                                    <p className="text-[9px] font-black uppercase tracking-widest leading-none">Model Insight</p>
-                                </div>
-                                <h4 className="text-xs font-black text-gray-900 dark:text-white leading-tight">{insight.title}</h4>
-                                <p className="mt-1 text-[10px] leading-relaxed text-gray-600 dark:text-cyan-100/70 font-medium">{insight.detail}</p>
-                            </article>
-                        ))
-                    )}
+                    {[
+                        {
+                            level: advisory?.risk_level ? advisory.risk_level.toUpperCase() : 'INFO',
+                            title: 'Live Weather Advisory',
+                            reason: advisory?.advice_text ?? 'No advisory available.',
+                            icon: 'fa-bell',
+                            color: 'border-orange-200 dark:border-orange-500/45 bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400',
+                        },
+                        {
+                            level: anomalyCount > 0 ? 'WARNING' : 'NORMAL',
+                            title: 'Anomaly Detection Status',
+                            reason: anomalyCount > 0
+                                ? `${anomalyCount} anomaly records in selected range ${startDate} -> ${endDate}.`
+                                : `No anomalies detected in selected range ${startDate} -> ${endDate}.`,
+                            icon: 'fa-triangle-exclamation',
+                            color: anomalyCount > 0 ? 'border-red-200 dark:border-red-500/45 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400' : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/30 text-gray-500 dark:text-gray-400',
+                        },
+                    ].map((alert) => (
+                        <article key={alert.title} className={`rounded-xl border p-4 transition-all hover:scale-[1.01] ${alert.color}`}>
+                            <div className="flex items-center gap-2 mb-1.5">
+                                <i className={`fa-solid ${alert.icon} text-[10px]`}></i>
+                                <p className="text-[9px] font-black uppercase tracking-widest leading-none">{alert.level}</p>
+                            </div>
+                            <h4 className="text-xs font-black text-gray-900 dark:text-white leading-tight">{alert.title}</h4>
+                            <p className="mt-1 text-[10px] leading-relaxed opacity-90 font-medium">xAI Reason: {alert.reason}</p>
+                        </article>
+                    ))}
                 </div>
             </section>
 
@@ -512,7 +428,7 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
                 {/* Multi-variable Analytics Chart */}
                 <article className="bg-white dark:bg-[#1e1e1e] border border-gray-200 dark:border-[#2a2a2a] rounded-2xl p-5 xl:col-span-7 shadow-sm flex flex-col min-w-0">
                     <div className="mb-3 flex items-center justify-between">
-                        <h3 className="text-xs font-black text-gray-900 dark:text-[#f3f4f6] uppercase tracking-wider">Temp · Rain · 7-Day Forecast</h3>
+                        <h3 className="text-xs font-black text-gray-900 dark:text-[#f3f4f6] uppercase tracking-wider">Temp Forecast</h3>
                         <span className="text-[9px] font-bold text-gray-400 uppercase">History + Forecast Trend</span>
                     </div>
 

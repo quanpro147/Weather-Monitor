@@ -2,13 +2,8 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from '
 
 import type { ISODateString } from '../types/common';
 
-export type DateRangePreset = '24h' | '7d' | '30d' | 'custom';
+export type DateRangePreset = '24h' | '7d' | '30d';
 export type ScopeMode = 'vietnam' | 'global';
-
-interface CustomDateRange {
-	startDate: ISODateString;
-	endDate: ISODateString;
-}
 
 interface GlobalFilterContextValue {
 	cityId: number | null;
@@ -22,7 +17,6 @@ interface GlobalFilterContextValue {
 	setScopeMode: (mode: ScopeMode) => void;
 	setSelectedCountry: (country: string) => void;
 	setDateRangePreset: (preset: DateRangePreset) => void;
-	setCustomDateRange: (range: CustomDateRange) => void;
 	setLastUpdatedDate: (date: string | null) => void;
 }
 
@@ -30,7 +24,7 @@ function toISODateString(date: Date): ISODateString {
 	return date.toISOString().slice(0, 10) as ISODateString;
 }
 
-function resolvePresetRange(preset: DateRangePreset): CustomDateRange {
+function resolvePresetRange(preset: DateRangePreset): { startDate: ISODateString; endDate: ISODateString } {
 	const end = new Date();
 	const start = new Date(end);
 
@@ -55,7 +49,6 @@ export function GlobalFilterProvider({ children }: { children: React.ReactNode }
 	const [scopeMode, setScopeMode] = useState<ScopeMode>('vietnam');
 	const [selectedCountry, setSelectedCountry] = useState<string>('');
 	const [dateRangePreset, setDateRangePreset] = useState<DateRangePreset>('7d');
-	const [customDateRange, setCustomDateRangeState] = useState<CustomDateRange | null>(null);
 	const [today, setToday] = useState(() => new Date().toISOString().slice(0, 10));
 	const [lastUpdatedDate, setLastUpdatedDate] = useState<string | null>(null);
 
@@ -68,16 +61,8 @@ export function GlobalFilterProvider({ children }: { children: React.ReactNode }
 	}, []);
 
 	const resolvedRange = useMemo(() => {
-		if (dateRangePreset === 'custom' && customDateRange) {
-			return customDateRange;
-		}
 		return resolvePresetRange(dateRangePreset);
-	}, [dateRangePreset, customDateRange, today]);
-
-	const setCustomDateRange = (range: CustomDateRange) => {
-		setCustomDateRangeState(range);
-		setDateRangePreset('custom');
-	};
+	}, [dateRangePreset, today]);
 
 	const value: GlobalFilterContextValue = {
 		cityId,
@@ -91,7 +76,6 @@ export function GlobalFilterProvider({ children }: { children: React.ReactNode }
 		setScopeMode,
 		setSelectedCountry,
 		setDateRangePreset,
-		setCustomDateRange,
 		setLastUpdatedDate,
 	};
 

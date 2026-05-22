@@ -252,7 +252,6 @@ export default function Topbar() {
                         <option value="24h">Last 24 Hours</option>
                         <option value="7d">Past 7 Days</option>
                         <option value="30d">Past 30 Days</option>
-                        <option value="custom">Custom</option>
                     </select>
                 </label>
 

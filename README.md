@@ -137,16 +137,6 @@ npm run dev
 
 ---
 
-### Bước 6 (Tùy chọn): Đưa dữ liệu cũ lên Supabase
-
-Nếu bạn là Admin và đang có sẵn database cục bộ muốn tải lên Supabase cho team dùng:
-
-```bash
-python scripts/migrate_to_supabase.py
-```
-
----
-
 ### Bước 7: Data pipeline (Hệ thống tự động cào dữ liệu)
 
 Pipeline (`data-pipeline/fetchers/Collect_RealTime.py`) tự động chạy mỗi ngày — nếu dữ liệu thời tiết bị trễ từ 2 ngày trở lên, nó sẽ tự động gọi Open-Meteo API lấy dữ liệu mới nhất. Chạy 24/7 qua Docker (`weather-data-pipeline` container).

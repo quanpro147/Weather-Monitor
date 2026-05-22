@@ -378,7 +378,7 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
             {/* ROW 2: Alert */}
             <section className="bg-white dark:bg-[#1e1e1e] border border-gray-200 dark:border-[#2a2a2a] rounded-2xl p-5 shadow-sm">
                 <div className="mb-4">
-                    <h3 className="text-sm font-black tracking-widest text-gray-900 dark:text-[#f3f4f6] uppercase">Alert</h3>
+                    <h3 className="text-sm font-black tracking-widest text-gray-900 dark:text-[#f3f4f6] uppercase">Advisory &amp; Anomalies</h3>
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

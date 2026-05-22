@@ -164,15 +164,13 @@ function MapGetter({ mapRef }: { mapRef: React.MutableRefObject<L.Map | null> })
     return null;
 }
 
-function MapFlyTo({ target }: { target: [number, number] | null }) {
+function MapFlyTo({ target }: { target: { coords: [number, number]; seq: number } | null }) {
     const map = useMap();
-    const prevKeyRef = useRef<string>('');
+    const lastSeqRef = useRef(-1);
     useEffect(() => {
-        if (!target) return;
-        const key = `${target[0]}:${target[1]}`;
-        if (key === prevKeyRef.current) return;
-        prevKeyRef.current = key;
-        map.flyTo(target, Math.max(map.getZoom(), 8), { duration: 1.2 });
+        if (!target || target.seq === lastSeqRef.current) return;
+        lastSeqRef.current = target.seq;
+        map.flyTo(target.coords, Math.max(map.getZoom(), 8), { duration: 1.2 });
     }, [target, map]);
     return null;
 }
@@ -190,7 +188,8 @@ export default function InteractiveMap({ data, isLoading = false, error = null, 
 
     const [currentZoom, setCurrentZoom] = useState(mapZoom);
     const mapRef = useRef<L.Map | null>(null);
-    const [flyTarget, setFlyTarget] = useState<[number, number] | null>(null);
+    const flySeqRef = useRef(0);
+    const [flyTarget, setFlyTarget] = useState<{ coords: [number, number]; seq: number } | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [showDropdown, setShowDropdown] = useState(false);
     const searchContainerRef = useRef<HTMLDivElement>(null);
@@ -212,7 +211,8 @@ export default function InteractiveMap({ data, isLoading = false, error = null, 
     }, []);
 
     const handleSelectCity = (point: MapDataPoint) => {
-        setFlyTarget([point.lat, point.lng]);
+        flySeqRef.current += 1;
+        setFlyTarget({ coords: [point.lat, point.lng], seq: flySeqRef.current });
         setSearchQuery(point.city);
         setShowDropdown(false);
     };

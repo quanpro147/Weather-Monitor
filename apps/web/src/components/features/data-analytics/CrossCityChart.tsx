@@ -63,15 +63,27 @@ export default function CrossCityChart() {
 		() => getCrossCity(scopeMode),
 	);
 
-	const cities = data?.cities ?? [];
-	const minChartWidth = Math.max(640, cities.length * 120);
+	const cities = React.useMemo(() => {
+		const rows = data?.cities ?? [];
+		return [...rows]
+			.sort((a, b) => {
+				const aValue = a[metric] ?? -Infinity;
+				const bValue = b[metric] ?? -Infinity;
+				return bValue - aValue;
+			})
+			.slice(0, 10);
+	}, [data?.cities, metric]);
 
 	return (
 		<section className={`rounded-xl border p-5 shadow-sm ${isDark ? 'border-[#2a2a2a] bg-[#151515]' : 'border-gray-200 bg-white'}`}>
 			<div className="mb-5 flex flex-wrap items-center justify-between gap-3">
 				<div>
-					<h3 className={`text-xs font-black uppercase tracking-widest ${isDark ? 'text-[#f3f4f6]' : 'text-gray-900'}`}>Cross-City Comparison</h3>
-					<p className={`mt-1 text-[10px] ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>Metric profile across key cities</p>
+					<h3 className={`text-xs font-black uppercase tracking-widest ${isDark ? 'text-[#f3f4f6]' : 'text-gray-900'}`}>
+						REGIONAL METRIC RANKING
+					</h3>
+					<p className={`mt-1 text-[10px] ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+						Top cities with the highest recorded values for the selected metric.
+					</p>
 				</div>
 
 				<div className={`flex items-center gap-1 rounded-lg border p-1 ${isDark ? 'border-[#2a2a2a] bg-[#101215]' : 'border-gray-200 bg-gray-50'}`}>
@@ -86,12 +98,16 @@ export default function CrossCityChart() {
 							key={key}
 							type="button"
 							onClick={() => setMetric(key)}
-							className={`rounded-md px-3 py-1.5 text-[10px] font-bold transition-colors ${
+							className={`rounded-md border px-3 py-1.5 text-[10px] font-bold transition-colors ${
 								metric === key
-									? 'bg-cyan-600 text-white'
+									? key === 'aqi'
+										? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/50'
+										: key === 'temp'
+											? 'bg-orange-500/20 text-orange-400 border-orange-500/50'
+											: 'bg-blue-500/20 text-blue-400 border-blue-500/50'
 									: isDark
-										? 'text-gray-400 hover:text-gray-200'
-										: 'text-gray-500 hover:text-gray-900'
+										? 'border-transparent text-gray-400 hover:text-gray-200'
+										: 'border-transparent text-gray-500 hover:text-gray-900'
 							}`}
 						>
 							{label}
@@ -109,10 +125,15 @@ export default function CrossCityChart() {
 			)}
 
 			{!isLoading && !error && cities.length > 0 && (
-				<div className="w-full overflow-x-auto custom-scrollbar snap-x snap-mandatory">
-					<div className="snap-start" style={{ minWidth: `${minChartWidth}px`, height: '300px' }}>
-						<ResponsiveContainer width="100%" height="100%">
-							<BarChart data={cities} margin={{ top: 8, right: 12, left: -16, bottom: 4 }} barCategoryGap="18%" barGap={2}>
+				<div className="h-[320px] w-full">
+					<ResponsiveContainer width="100%" height="100%">
+						<BarChart
+							layout="vertical"
+							data={cities}
+							margin={{ top: 8, right: 16, left: 12, bottom: 8 }}
+							barCategoryGap="18%"
+							barGap={2}
+						>
 								<defs>
 									<linearGradient id={config.gradientId} x1="0" y1="0" x2="0" y2="1">
 										<stop offset="0%" stopColor={config.top} stopOpacity={0.95} />
@@ -122,14 +143,12 @@ export default function CrossCityChart() {
 								</defs>
 
 								<CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#334155' : '#cbd5e1'} strokeOpacity={0.2} vertical={false} />
-								<XAxis
-									dataKey="city"
-									tick={{ fill: isDark ? '#94a3b8' : '#64748b', fontSize: 11, fontWeight: 700 }}
-									axisLine={{ stroke: isDark ? '#334155' : '#cbd5e1' }}
-									tickLine={false}
-								/>
+								<XAxis type="number" hide />
 								<YAxis
-									tick={{ fill: isDark ? '#94a3b8' : '#64748b', fontSize: 11 }}
+									type="category"
+									dataKey="city"
+									width={100}
+									tick={{ fill: isDark ? '#94a3b8' : '#64748b', fontSize: 11, fontWeight: 700 }}
 									axisLine={{ stroke: isDark ? '#334155' : '#cbd5e1' }}
 									tickLine={false}
 								/>
@@ -141,10 +160,9 @@ export default function CrossCityChart() {
 									wrapperStyle={tooltipStyles.wrapperStyle}
 									formatter={(value: number) => [`${value} ${config.unit}`.trim(), config.label]}
 								/>
-								<Bar dataKey={metric} fill={`url(#${config.gradientId})`} barSize={44} radius={[4, 4, 0, 0]} />
+								<Bar dataKey={metric} fill={`url(#${config.gradientId})`} barSize={20} radius={[0, 4, 4, 0]} />
 							</BarChart>
 						</ResponsiveContainer>
-					</div>
 				</div>
 			)}
 		</section>

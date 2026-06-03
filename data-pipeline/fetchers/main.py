@@ -60,5 +60,15 @@ def _run_cleaner() -> None:
 
 
 if __name__ == "__main__":
-    collect_main()
-    _run_cleaner()
+    # RUN_MODE controls which stage this invocation runs:
+    #   "fetch" — collect only (matrix shards run this, no cleaner to avoid concurrent write-back)
+    #   "clean" — cleaner only (single job after all shards finish)
+    #   "all"   — both, sequentially (default — local runs / single-shard)
+    mode = os.getenv("RUN_MODE", "all")
+    if mode not in ("all", "fetch", "clean"):
+        raise ValueError(f"Invalid RUN_MODE={mode!r} (expected 'all', 'fetch', or 'clean').")
+
+    if mode in ("all", "fetch"):
+        collect_main()
+    if mode in ("all", "clean"):
+        _run_cleaner()

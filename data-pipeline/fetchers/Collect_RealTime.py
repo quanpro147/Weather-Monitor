@@ -315,33 +315,54 @@ def _build_fetch_queue(
     return incremental + bulk
 
 
+def _shard_queue(queue: list[tuple], shard_index: int, shard_count: int) -> list[tuple]:
+    """
+    Chia queue cho 1 shard theo round-robin. Queue đã sort theo lag nên round-robin
+    phân bổ đều cả bulk lẫn incremental giữa các shard (không dồn city nặng vào 1 shard).
+    """
+    if shard_count <= 1:
+        return queue
+    return [q for i, q in enumerate(queue) if i % shard_count == shard_index]
+
+
 def main() -> None:
-    logger.info("Starting data collection...")
+    shard_index = int(os.getenv("SHARD_INDEX", "0"))
+    shard_count = int(os.getenv("SHARD_COUNT", "1"))
+    if not (0 <= shard_index < shard_count):
+        raise ValueError(
+            f"Invalid shard config: SHARD_INDEX={shard_index}, SHARD_COUNT={shard_count} "
+            "(require 0 <= SHARD_INDEX < SHARD_COUNT)."
+        )
+
+    logger.info("Starting data collection (shard %d/%d)...", shard_index, shard_count)
 
     csv_path = os.path.join(os.path.dirname(__file__), "cities_1500.csv")
     cities_df = pd.read_csv(csv_path)
     total_cities = len(cities_df)
 
-    setup_cities(cities_df)
+    # Chỉ shard 0 upsert cities — idempotent, tránh N shard cùng ghi đè 1 bảng.
+    if shard_index == 0:
+        setup_cities(cities_df)
 
     end_date = datetime.date.today() - datetime.timedelta(days=1)
     today = datetime.date.today()
     city_latest_dates = get_city_latest_dates()
 
-    _print_date_summary("BEFORE", city_latest_dates, total_cities)
+    if shard_index == 0:
+        _print_date_summary("BEFORE", city_latest_dates, total_cities)
 
-    queue = _build_fetch_queue(cities_df, city_latest_dates, today)
+    full_queue = _build_fetch_queue(cities_df, city_latest_dates, today)
+    queue = _shard_queue(full_queue, shard_index, shard_count)
     if not queue:
-        logger.info("Data is up to date. Skipping.")
+        logger.info("Data is up to date for this shard. Skipping.")
         return
 
     logger.info(
-        "Fetch queue: %d cities to update (incremental first, bulk last).",
-        len(queue),
+        "Fetch queue: %d/%d cities to update on shard %d/%d (incremental first, bulk last).",
+        len(queue), len(full_queue), shard_index, shard_count,
     )
 
     fetched = 0
-    skipped = total_cities - len(queue)
     errors = 0
 
     for i, (city_id, city_name, lat, lon, start_date, lag_days) in enumerate(queue, 1):
@@ -359,12 +380,16 @@ def main() -> None:
         sleep_s = 0.3 if lag_days <= 30 else 0.8
         time.sleep(sleep_s)
 
-    logger.info("Run summary: fetched=%d, skipped=%d, errors=%d", fetched, skipped, errors)
+    logger.info(
+        "Shard %d/%d summary: fetched=%d, errors=%d (shard queue=%d)",
+        shard_index, shard_count, fetched, errors, len(queue),
+    )
 
-    final_dates = get_city_latest_dates()
-    _print_date_summary("AFTER", final_dates, total_cities)
+    if shard_index == 0:
+        final_dates = get_city_latest_dates()
+        _print_date_summary("AFTER", final_dates, total_cities)
 
-    logger.info("Finished data collection.")
+    logger.info("Finished data collection (shard %d/%d).", shard_index, shard_count)
 
 
 if __name__ == "__main__":

@@ -126,36 +126,77 @@ def fetch_city_feature_rows(scope_mode: str) -> list[dict]:
 
 # ── Profile generation ────────────────────────────────────────────────────────
 
-def _describe_cluster(cluster_id: int, centroid_temp: float, centroid_aqi: float, centroid_rain: float) -> dict:
-    parts: list[str] = []
+def _tier_labels(values: np.ndarray, labels: tuple[str, str, str]) -> list[str]:
+    if values.size == 0:
+        return []
+    if np.allclose(values, values[0]):
+        return [labels[1]] * len(values)
 
-    if centroid_temp < 20:
-        parts.append("Cold")
-    elif centroid_temp > 32:
-        parts.append("Hot")
-    else:
-        parts.append("Warm")
+    q1, q2 = np.quantile(values, [0.33, 0.66])
+    result: list[str] = []
+    for value in values:
+        if value <= q1:
+            result.append(labels[0])
+        elif value <= q2:
+            result.append(labels[1])
+        else:
+            result.append(labels[2])
+    return result
 
-    if centroid_aqi > 150:
-        parts.append("High Pollution")
-    elif centroid_aqi < 50:
-        parts.append("Clean Air")
 
-    if centroid_rain > 80:
-        parts.append("Heavy Rain")
-    elif centroid_rain < 5:
-        parts.append("Dry")
+def _build_cluster_profiles(centroids: np.ndarray) -> list[dict]:
+    temps = centroids[:, 0]
+    aqis = centroids[:, 1]
+    rains = centroids[:, 2]
 
-    label = " & ".join(parts[:2]) if len(parts) >= 2 else parts[0]
-    color, color_light = _CLUSTER_COLORS[cluster_id % len(_CLUSTER_COLORS)]
+    temp_labels = _tier_labels(temps, ("Cool", "Warm", "Hot"))
+    air_labels = _tier_labels(aqis, ("Clean Air", "Moderate Air", "Polluted Air"))
 
-    return {
-        "id": cluster_id,
-        "name": f"Cluster {cluster_id}: {label}",
-        "color": color,
-        "colorLight": color_light,
-        "desc": f"Avg temp {centroid_temp:.1f}°C, AQI {centroid_aqi:.0f}, rain {centroid_rain:.1f} mm.",
-    }
+    base_names: list[str] = []
+    profiles: list[dict] = []
+    for cluster_id, (temp_label, air_label) in enumerate(zip(temp_labels, air_labels)):
+        rain = rains[cluster_id]
+        if rain > 15:
+            rain_suffix = " & Rainy"
+        elif rain < 10:
+            rain_suffix = " & Dry"
+        else:
+            rain_suffix = " & Balanced"
+
+        base_name = f"{temp_label}, {air_label}{rain_suffix}"
+        base_names.append(base_name)
+
+        color, color_light = _CLUSTER_COLORS[cluster_id % len(_CLUSTER_COLORS)]
+        profiles.append({
+            "id": cluster_id,
+            "name": base_name,
+            "color": color,
+            "colorLight": color_light,
+            "desc": f"Avg temp {temps[cluster_id]:.1f}°C, AQI {aqis[cluster_id]:.0f}, rain {rains[cluster_id]:.1f} mm.",
+        })
+
+    name_counts: dict[str, int] = {}
+    for name in base_names:
+        name_counts[name] = name_counts.get(name, 0) + 1
+
+    duplicates = {name for name, count in name_counts.items() if count > 1}
+    if duplicates:
+        for duplicate_name in duplicates:
+            indices = [i for i, name in enumerate(base_names) if name == duplicate_name]
+            sorted_indices = sorted(indices, key=lambda idx: rains[idx])
+            for position, idx in enumerate(sorted_indices):
+                if len(sorted_indices) == 2:
+                    suffix = " (Lower Rain)" if position == 0 else " (Higher Rain)"
+                else:
+                    if position == 0:
+                        suffix = " (Lower Rain)"
+                    elif position == len(sorted_indices) - 1:
+                        suffix = " (Higher Rain)"
+                    else:
+                        suffix = " (Moderate Rain)"
+                profiles[idx]["name"] = f"{profiles[idx]['name']}{suffix}"
+
+    return profiles
 
 
 # ── Public service functions ──────────────────────────────────────────────────
@@ -277,10 +318,7 @@ def build_kmeans_clusters(scope_mode: str, k: int) -> dict:
         for _, row in df_clean.iterrows()
     ]
 
-    profiles = [
-        _describe_cluster(i, centroids[i][0], centroids[i][1], centroids[i][2])
-        for i in range(k)
-    ]
+    profiles = _build_cluster_profiles(centroids)
 
     return {
         "scope_mode": scope_mode,

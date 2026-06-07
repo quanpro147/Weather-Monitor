@@ -27,27 +27,27 @@ function formatNumber(value: number | null | undefined, digits = 1): string {
 
 function aqiRiskText(aqi: number | null | undefined): string {
 	if (aqi === null || aqi === undefined) {
-		return 'Unavailable';
+		return 'Chưa có số liệu';
 	}
-	if (aqi <= 50) return 'Good';
-	if (aqi <= 100) return 'Moderate';
-	if (aqi <= 150) return 'Sensitive group risk';
-	if (aqi <= 200) return 'Unhealthy';
-	return 'Very unhealthy';
+	if (aqi <= 50) return 'Không khí: Tốt & Sạch';
+	if (aqi <= 100) return 'Không khí: Khá / Trung bình';
+	if (aqi <= 150) return 'Nhóm nhạy cảm nên chú ý';
+	if (aqi <= 200) return 'Không khí ô nhiễm, có hại';
+	return 'Ô nhiễm nghiêm trọng, rất hại';
 }
 
 function resolveTempDelta(history: WeatherDaily[], current: WeatherDaily | null): string {
-	if (!current) return 'No baseline';
+	if (!current) return 'Chưa có mốc so sánh';
 
 	const previousDay = history.length > 1 ? history[history.length - 2] : null;
 	const currentTemp = current.temperature_2m_max;
 	const previousTemp = previousDay?.temperature_2m_max;
 
-	if (currentTemp == null || previousTemp == null) return 'No baseline';
+	if (currentTemp == null || previousTemp == null) return 'Chưa có mốc so sánh';
 
 	const delta = currentTemp - previousTemp;
 	const sign = delta >= 0 ? '+' : '';
-	return `${sign}${delta.toFixed(1)}°C vs previous day`;
+	return `${sign}${delta.toFixed(1)}°C so với hôm qua`;
 }
 
 function avg(values: number[]): number | null {
@@ -69,7 +69,7 @@ export default function KpiGrid({ current, history, advisory, isLoading, error }
 	if (error) {
 		return (
 			<div className="xl:col-span-7 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-600 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
-				Unable to render KPI cards: {error}
+				Không thể hiển thị thẻ chỉ số: {error}
 			</div>
 		);
 	}
@@ -92,21 +92,30 @@ export default function KpiGrid({ current, history, advisory, isLoading, error }
 	const historyHumidity = history.map(r => r.relative_humidity_2m_mean).filter((v): v is number => v != null);
 	const periodAvgHumidity = avg(historyHumidity);
 
-	const advisoryText = advisory?.advice_text ?? 'No advisory available';
+	const advisoryText = advisory?.advice_text ?? 'Không có thông tin khuyến nghị';
+
+	const riskMap: Record<string, string> = {
+		high: 'Rủi ro cao',
+		medium: 'Rủi ro trung bình',
+		low: 'Rủi ro thấp / An toàn',
+	};
+	const riskLabel = advisory?.risk_level 
+		? (riskMap[advisory.risk_level.toLowerCase()] ?? advisory.risk_level)
+		: 'An toàn';
 
 	const cards = [
 		{
-			label: usePeriod ? `${periodDays}d Avg Temp` : 'Current Temp',
+			label: usePeriod ? `Nhiệt Độ TB ${periodDays} Ngày` : 'Nhiệt Độ Hôm Nay',
 			value: `${formatNumber(usePeriod ? periodAvgTemp : currentTemp)}°C`,
 			trend: usePeriod
-				? `Today: ${formatNumber(currentTemp)}°C`
+				? `Hôm nay: ${formatNumber(currentTemp)}°C`
 				: resolveTempDelta(history, current),
 			icon: 'fa-temperature-half',
 			color: 'text-orange-500 dark:text-orange-400',
 			bg: 'bg-orange-50 dark:bg-orange-500/10',
 		},
 		{
-			label: 'AQI Index',
+			label: 'Chất Lượng Không Khí AQI',
 			value: formatNumber(aqi, 0),
 			trend: aqiRiskText(aqi),
 			icon: 'fa-smog',
@@ -114,18 +123,18 @@ export default function KpiGrid({ current, history, advisory, isLoading, error }
 			bg: 'bg-red-50 dark:bg-red-500/10',
 		},
 		{
-			label: usePeriod ? `${periodDays}d Avg Humidity` : 'Humidity',
+			label: usePeriod ? `Độ Ẩm TB ${periodDays} Ngày` : 'Độ Ẩm Hiện Tại',
 			value: `${formatNumber(usePeriod ? periodAvgHumidity : todayHumidity, 0)}%`,
-			trend: advisory?.risk_level ? `Risk: ${advisory.risk_level}` : 'No risk level',
+			trend: `Cảnh báo: ${riskLabel}`,
 			icon: 'fa-droplet',
 			color: 'text-cyan-500 dark:text-cyan-400',
 			bg: 'bg-cyan-50 dark:bg-cyan-500/10',
 		},
 		{
-			label: usePeriod ? `${periodDays}d Total Rain` : 'Rainfall',
+			label: usePeriod ? `Tổng Mưa ${periodDays} Ngày` : 'Lượng Mưa Hôm Nay',
 			value: `${formatNumber(usePeriod ? periodTotalRain : todayRainfall)} mm`,
 			trend: usePeriod
-				? `Today: ${formatNumber(todayRainfall)} mm`
+				? `Hôm nay: ${formatNumber(todayRainfall)} mm`
 				: advisoryText.length > 36 ? `${advisoryText.slice(0, 36)}...` : advisoryText,
 			icon: 'fa-cloud-rain',
 			color: 'text-blue-500 dark:text-blue-400',

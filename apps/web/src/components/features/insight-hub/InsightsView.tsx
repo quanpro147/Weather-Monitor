@@ -192,28 +192,24 @@ export default function InsightsView() {
             )}
 
             {/* ── ROW 0: Weather Classification Overview (bulk, scope-wide) ── */}
-            <section className={`p-6 ${surface}`}>
-                <div className="flex items-center gap-2 mb-4">
-                    <i className="fa-solid fa-layer-group text-cyan-500 text-xs" />
-                    <h3 className={heading}>Weather Classification Overview</h3>
-                    <span className={`ml-auto text-[9px] font-bold uppercase tracking-widest ${isDark ? 'text-gray-600' : 'text-gray-400'}`}>
-                        {scopeMode === 'vietnam' ? 'Vietnam scope' : 'Global scope'}
-                    </span>
-                </div>
-                <WeatherClassificationPanel
-                    distribution={distribution}
-                    totalCities={totalCities}
-                    isLoading={classificationLoading}
-                    error={classificationError}
-                    onCityClick={(id) => setCityId(id)}
-                />
-            </section>
+            <WeatherClassificationPanel
+                distribution={distribution}
+                totalCities={totalCities}
+                isLoading={classificationLoading}
+                error={classificationError}
+                onCityClick={(id) => setCityId(id)}
+            />
 
             {/* ── ROW 1: LLM Summary ───────────────────────────────────────── */}
             <section className={`p-6 ${surface}`}>
-                <div className="flex items-center gap-2 mb-4">
-                    <i className="fa-solid fa-wand-magic-sparkles text-cyan-500" />
-                    <h3 className={heading}>LLM Weather Summary</h3>
+                <div className="flex flex-col gap-1.5 mb-4">
+                    <div className="flex items-center gap-2">
+                        <i className="fa-solid fa-wand-magic-sparkles text-cyan-500" />
+                        <h3 className={heading}>Bản Tin Tóm Tắt Thời Tiết AI (AI Summary)</h3>
+                    </div>
+                    <p className={`text-[10px] ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                        Mô hình ngôn ngữ tự động phân tích biểu đồ khí hậu và các ngày dị biệt trong tháng để cung cấp báo cáo văn bản tóm tắt xu hướng và gợi ý hành động thực tế.
+                    </p>
                 </div>
                 <AiSummaryPanel cityId={cityId} />
             </section>
@@ -223,8 +219,8 @@ export default function InsightsView() {
                 <section className={`p-6 ${surface} xl:col-span-7 flex flex-col`}>
                     <div className="mb-6 flex items-center justify-between">
                         <div>
-                            <h3 className={heading}>Isolation Forest Analysis</h3>
-                            <p className={subheading}>Outlier detection visualization</p>
+                            <h3 className={heading}>Phát Hiện Thời Tiết Bất Thường Bằng AI (Anomaly Detection)</h3>
+                            <p className={subheading}>Mô hình Isolation Forest tự động khoanh vùng các ngày có sự kết hợp nhiệt độ và độ ẩm dị biệt (Màu đỏ: Dị biệt cực đoan, Màu xanh: Bình thường).</p>
                         </div>
                     </div>
                     <div className="flex-1 bg-gray-50 dark:bg-[#151515] rounded-xl border border-gray-100 dark:border-[#2a2a2a] p-2">
@@ -234,8 +230,8 @@ export default function InsightsView() {
 
                 <section className={`p-6 ${surface} xl:col-span-5 flex flex-col`}>
                     <div className="mb-6">
-                        <h3 className={heading}>Explainable AI (xAI) Log</h3>
-                        <p className={subheading}>Why anomalies were flagged</p>
+                        <h3 className={heading}>Nhật Ký Giải Thích Bất Thường (xAI Log)</h3>
+                        <p className={subheading}>Hệ thống giải thích cụ thể lý do tại sao ngày đó bị coi là bất thường (Ví dụ: mưa quá lớn hoặc nhiệt độ quá cao so với phân phối chung).</p>
                     </div>
                     <div className="flex-1">
                         <AnomalyTimeline records={anomalyRecords} />
@@ -247,14 +243,14 @@ export default function InsightsView() {
             <section className={`p-6 ${surface}`}>
                 <div className="mb-4 flex items-center justify-between">
                     <div>
-                        <h3 className={heading}>7-Day Temperature Forecast</h3>
+                        <h3 className={heading}>Dự Báo Xu Hướng Nhiệt Độ 7 Ngày Tới (Holt-Winters)</h3>
                         <p className={subheading}>
-                            Historical trend + Holt Double Exponential Smoothing forecast with ±1σ confidence band
+                            Biểu đồ xu hướng nhiệt độ lịch sử kết hợp đường dự báo chu kỳ tuần tự nhiên (nét đứt) và dải tin cậy sai số có thể xảy ra (vùng bóng mờ).
                         </p>
                     </div>
                     {forecastData && forecastData.length > 0 && (
                         <span className={`text-[9px] font-bold uppercase px-2 py-1 rounded ${isDark ? 'bg-cyan-500/15 text-cyan-300' : 'bg-cyan-100 text-cyan-700'}`}>
-                            Method: {forecastData[0].method}
+                            Mô hình: {forecastData[0].method === 'holt-winters' ? 'Holt-Winters (Mùa tuần)' : forecastData[0].method}
                         </span>
                     )}
                 </div>
@@ -374,8 +370,8 @@ export default function InsightsView() {
             {/* ── ROW 4: Live Alert Stream ──────────────────────────────────── */}
             <section className={`p-6 ${surface}`}>
                 <div className="mb-4">
-                    <h3 className={heading}>Live Alert Stream</h3>
-                    <p className={subheading}>Rule-based advisory + top anomaly signals</p>
+                    <h3 className={heading}>Dòng Tin Cảnh Báo Khí Tượng Thời Gian Thực (Alert Stream)</h3>
+                    <p className={subheading}>Tổng hợp các khuyến nghị thời tiết nguy hiểm dựa trên quy chuẩn khí tượng và phát hiện dị biệt thời tiết từ AI.</p>
                 </div>
                 <AlertList
                     advisory={advisory}

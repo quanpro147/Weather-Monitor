@@ -76,16 +76,21 @@ export default function WeatherClassificationPanel({
     return (
         <div className={`p-6 rounded-2xl border shadow-sm ${surface}`}>
             {/* Header */}
-            <div className="flex items-center justify-between mb-5">
-                <div className="flex items-center gap-2">
-                    <i className="fa-solid fa-layer-group text-cyan-500 text-xs" />
-                    <h3 className={`text-xs font-black uppercase tracking-widest ${text}`}>
-                        Weather Classification Overview
-                    </h3>
+            <div className="flex flex-col gap-1.5 mb-5">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <i className="fa-solid fa-layer-group text-cyan-500 text-xs" />
+                        <h3 className={`text-xs font-black uppercase tracking-widest ${text}`}>
+                            Phân Cụm Khí Hậu Các Thành Phố (K-Means Clustering)
+                        </h3>
+                    </div>
+                    <span className={`text-[10px] font-semibold ${subtext}`}>
+                        {totalCities} thành phố đang theo dõi
+                    </span>
                 </div>
-                <span className={`text-[10px] font-semibold ${subtext}`}>
-                    {totalCities} cities in scope
-                </span>
+                <p className={`text-[10px] leading-relaxed ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                    Mô hình **K-Means** tự động phân chia các địa phương có khí hậu tương đồng về Nhiệt độ, Lượng mưa và Chất lượng không khí (AQI) thành các cụm riêng biệt. **Bấm vào một nhóm để mở rộng danh sách.**
+                </p>
             </div>
 
             {/* Distribution bars */}
@@ -146,7 +151,7 @@ export default function WeatherClassificationPanel({
 
             {/* Legend footer */}
             <p className={`text-[9px] font-semibold uppercase tracking-widest ${subtext}`}>
-                Based on current WMO weather codes · Click a category to expand city list
+                Dựa trên dữ liệu thời tiết thực tế hiện tại · Click vào từng nhóm để xem danh sách trạm chi tiết
             </p>
         </div>
     );

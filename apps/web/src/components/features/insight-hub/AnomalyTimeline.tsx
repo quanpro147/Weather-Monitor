@@ -18,22 +18,22 @@ export default function AnomalyTimeline({ records }: AnomalyTimelineProps) {
             const humidity = item.relative_humidity_2m_mean;
             const wind = item.wind_speed_10m_max;
 
-            let type = 'Pattern Shift';
+            let type = 'Biến Động Khí Hậu';
             if ((temp ?? 0) >= 37) {
-                type = 'Heat Spike';
+                type = 'Nhiệt Độ Tăng Cao';
             } else if ((item.rain_sum ?? 0) >= 30) {
-                type = 'Rain Surge';
+                type = 'Mưa Lớn Đột Biến';
             } else if ((wind ?? 0) >= 45) {
-                type = 'Wind Escalation';
+                type = 'Gió Giật Mạnh';
             } else if ((humidity ?? 0) >= 90 && (temp ?? 99) <= 22) {
-                type = 'Fog Risk';
+                type = 'Nguy Cơ Sương Mù';
             }
 
             return {
                 date: item.date,
                 type,
                 score: item.anomaly_score,
-                reason: `Temp ${temp ?? 'N/A'}C, Rain ${item.rain_sum ?? 0}mm, Wind ${wind ?? 0}km/h, Humidity ${humidity ?? 'N/A'}%`,
+                reason: `Nhiệt độ: ${temp ?? 'N/A'}°C · Lượng mưa: ${item.rain_sum ?? 0}mm · Tốc độ gió: ${wind ?? 0}km/h · Độ ẩm: ${humidity ?? 'N/A'}%`,
             };
         });
 
@@ -43,9 +43,9 @@ export default function AnomalyTimeline({ records }: AnomalyTimelineProps) {
                 <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-3 ${isDark ? 'bg-emerald-500/20' : 'bg-emerald-100'}`}>
                     <i className="fa-solid fa-shield-halved text-2xl text-emerald-500"></i>
                 </div>
-                <h4 className="text-sm font-black text-emerald-500 uppercase tracking-widest">System Stable</h4>
+                <h4 className="text-sm font-black text-emerald-500 uppercase tracking-widest">Hệ Thống Ổn Định</h4>
                 <p className={`text-[11px] mt-2 max-w-[250px] ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                    Isolation Forest did not detect any outlier data points within the selected time range.
+                    Mô hình AI không phát hiện bất kỳ ngày thời tiết dị biệt/bất thường nào trong khoảng thời gian đã chọn.
                 </p>
             </div>
         );
@@ -69,11 +69,11 @@ export default function AnomalyTimeline({ records }: AnomalyTimelineProps) {
                             </div>
 
                             <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${isDark ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20' : 'bg-cyan-50 text-cyan-600 border border-cyan-200'}`}>
-                                Anomaly Score: {event.score.toFixed(3)}
+                                Điểm bất thường (AI Score): {event.score.toFixed(3)}
                             </span>
 
                             <p className={`text-[10px] font-medium leading-relaxed ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                                <span className="text-gray-500 font-bold mr-1">xAI Explanation:</span>
+                                <span className="text-gray-500 font-bold mr-1">Giải thích (xAI):</span>
                                 {event.reason}
                             </p>
                         </div>

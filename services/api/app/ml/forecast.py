@@ -1,20 +1,18 @@
 """
-Temperature forecasting using Holt's Double Exponential Smoothing.
+Temperature forecasting using Holt-Winters Triple Exponential Smoothing.
 
-Rationale over plain linear regression:
-- Linear polyfit extrapolates a single global trend, ignoring local momentum.
-- Holt's method adapts level and trend estimates at each step, giving more
-  weight to recent observations — better for short-horizon weather forecasts.
+Rationale:
+- Holt-Winters introduces a seasonal component (weekly period=7) to capture realistic up-and-down oscillations in weather, which is more convincing than a straight linear trend.
 - We also return a ±1-sigma confidence band derived from in-sample residuals.
-
-Falls back to linear regression when data has too little variance for smoothing
-(constant-like series) so the endpoint always returns something useful.
+- Falls back to Holt's Double Exponential Smoothing or Linear Regression when statsmodels fails or data has too little variance.
 """
 
 import datetime
 import math
+import warnings
 
 import numpy as np
+from statsmodels.tsa.holtwinters import ExponentialSmoothing
 
 
 # ── Holt's Double Exponential Smoothing ──────────────────────────────────────
@@ -58,6 +56,34 @@ def _linear_extrapolate(values: list[float], days_ahead: int) -> tuple[list[floa
     return preds, residual_std
 
 
+def _clean_outliers(values: list[float], threshold: float = 2.5) -> list[float]:
+    """
+    Detect and impute 1D temperature outliers using Z-score.
+    Outliers are replaced with the average of neighboring points to avoid distorting the forecast.
+    """
+    if len(values) < 5:
+        return values
+
+    arr = np.array(values)
+    mean = np.mean(arr)
+    std = np.std(arr)
+
+    if std < 0.1:
+        return values
+
+    cleaned = list(values)
+    for i in range(len(values)):
+        z = abs(values[i] - mean) / std
+        if z > threshold:
+            if i > 0 and i < len(values) - 1:
+                cleaned[i] = (cleaned[i-1] + cleaned[i+1]) / 2.0
+            elif i == 0:
+                cleaned[i] = cleaned[1]
+            else:
+                cleaned[i] = cleaned[i-1]
+    return cleaned
+
+
 # ── Public API ────────────────────────────────────────────────────────────────
 
 def forecast_temperature(
@@ -68,44 +94,53 @@ def forecast_temperature(
 ) -> list[dict]:
     """
     Forecast daily mean temperature for the next `days_ahead` days.
-
-    Parameters
-    ----------
-    records    : list of dicts with at least "date" and "temperature_2m_mean"
-    days_ahead : number of future days to forecast (default 7)
-    alpha      : Holt level smoothing factor (0–1)
-    beta       : Holt trend smoothing factor (0–1)
-
-    Returns
-    -------
-    List of dicts with:
-        date                    – ISO date string
-        predicted_temperature   – point forecast (°C)
-        confidence_lower        – forecast - 1σ
-        confidence_upper        – forecast + 1σ
-        method                  – "holt" or "linear" (fallback)
+    Uses Holt-Winters Triple Exponential Smoothing with weekly seasonality (period=7)
+    to generate realistic, oscillating weather forecasts.
+    Cleans/imputes historical outliers before fitting the model to prevent distortion.
+    Falls back to Holt's Double Exponential Smoothing or Linear Regression in case of failure.
     """
     if len(records) < 30:
         return []
 
     records = sorted(records, key=lambda r: r["date"])
     values = [float(r.get("temperature_2m_mean", 0) or 0) for r in records]
+    cleaned_values = _clean_outliers(values)
 
     last_date = datetime.date.fromisoformat(records[-1]["date"])
-    method = "holt"
+    method = "holt-winters"
 
-    # Detect near-constant series (variance < 0.01°C²) — Holt is unstable there
-    if float(np.var(values)) < 0.01:
-        preds, sigma = _linear_extrapolate(values, days_ahead)
+    # Detect near-constant series (variance < 0.01°C²) — Holt-Winters is unstable there
+    if float(np.var(cleaned_values)) < 0.01:
+        preds, sigma = _linear_extrapolate(cleaned_values, days_ahead)
         method = "linear"
     else:
-        fitted, last_level, last_trend = _holt_smooth(values, alpha=alpha, beta=beta)
-        residuals = np.array(values) - np.array(fitted)
-        sigma = float(np.std(residuals))
+        try:
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore")
+                model = ExponentialSmoothing(
+                    cleaned_values,
+                    trend="add",
+                    seasonal="add",
+                    seasonal_periods=7,
+                    initialization_method="estimated"
+                )
+                fit_model = model.fit()
+                predictions_raw = fit_model.forecast(days_ahead)
+                preds = [float(p) for p in predictions_raw]
+                
+                fitted = fit_model.fittedvalues
+                residuals = np.array(cleaned_values) - np.array(fitted)
+                sigma = float(np.std(residuals))
+        except Exception as e:
+            # Fallback to Holt's Double Exponential Smoothing if Holt-Winters fails
+            fitted, last_level, last_trend = _holt_smooth(cleaned_values, alpha=alpha, beta=beta)
+            residuals = np.array(cleaned_values) - np.array(fitted)
+            sigma = float(np.std(residuals))
 
-        preds = []
-        for h in range(1, days_ahead + 1):
-            preds.append(last_level + h * last_trend)
+            preds = []
+            for h in range(1, days_ahead + 1):
+                preds.append(last_level + h * last_trend)
+            method = "holt"
 
     results: list[dict] = []
     for i, pred in enumerate(preds):

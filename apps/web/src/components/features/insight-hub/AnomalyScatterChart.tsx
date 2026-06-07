@@ -27,12 +27,12 @@ export default function AnomalyScatterChart({ data }: AnomalyScatterChartProps) 
             return (
                 <div className={`p-3 rounded-lg border shadow-lg ${isDark ? 'bg-[#151515] border-[#2a2d33]' : 'bg-white border-gray-200'}`}>
                     <p className={`font-black mb-1 ${data.is_anomaly ? 'text-red-500' : 'text-cyan-500'}`}>
-                        {data.is_anomaly ? 'ANOMALY DETECTED' : 'NORMAL RECORD'}
+                        {data.is_anomaly ? '⚠️ PHÁT HIỆN BẤT THƯỜNG' : '✅ THỜI TIẾT BÌNH THƯỜNG'}
                     </p>
-                    <p className={`text-xs font-bold ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Date: {data.date}</p>
-                    <p className={`text-xs font-bold ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Temp: {data.temp.toFixed(1)}C | Humidity: {data.humidity.toFixed(1)}%</p>
+                    <p className={`text-xs font-bold ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Ngày: {data.date}</p>
+                    <p className={`text-xs font-bold ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Nhiệt độ: {data.temp.toFixed(1)}°C | Độ ẩm: {data.humidity.toFixed(1)}%</p>
                     <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold mt-2 ${isDark ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20' : 'bg-cyan-50 text-cyan-600 border border-cyan-200'}`}>
-                        Anomaly Score: {data.anomaly_score.toFixed(3)}
+                        Điểm bất thường (AI Score): {data.anomaly_score.toFixed(3)}
                     </span>
                 </div>
             );
@@ -53,11 +53,11 @@ export default function AnomalyScatterChart({ data }: AnomalyScatterChartProps) 
                     <ReferenceArea x1={18} x2={34} y1={45} y2={75} fill={isDark ? "#10b981" : "#34d399"} fillOpacity={0.15} />
                     
                     {/* Vẽ điểm bình thường */}
-                    <Scatter name="Normal" data={normalData} fill="#06b6d4" opacity={0.6} />
+                    <Scatter name="Bình thường" data={normalData} fill="#06b6d4" opacity={0.6} />
                     
                     {/* Vẽ điểm bất thường */}
                     <Scatter
-                        name="Anomaly"
+                        name="Bất thường"
                         data={anomalyData}
                         fill="#ef4444"
                         opacity={0.95}
@@ -78,7 +78,7 @@ export default function AnomalyScatterChart({ data }: AnomalyScatterChartProps) 
 
             {data.length === 0 && (
                 <div className={`absolute inset-0 flex items-center justify-center text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                    No weather points available for scatter rendering.
+                    Chưa có dữ liệu thời tiết để biểu diễn.
                 </div>
             )}
         </div>

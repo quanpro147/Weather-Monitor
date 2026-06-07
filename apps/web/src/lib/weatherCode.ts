@@ -23,15 +23,15 @@ export interface WeatherCategory {
 }
 
 const CATEGORIES: Record<WeatherCategoryKey, Omit<WeatherCategory, 'key'>> = {
-    Clear:        { label: 'Clear',        icon: 'fa-sun',                colorClass: 'text-amber-500',   bgClass: 'bg-amber-50  dark:bg-amber-500/10'   },
-    Cloudy:       { label: 'Cloudy',       icon: 'fa-cloud',              colorClass: 'text-gray-400',    bgClass: 'bg-gray-100  dark:bg-gray-500/10'    },
-    Foggy:        { label: 'Foggy',        icon: 'fa-smog',               colorClass: 'text-gray-500',    bgClass: 'bg-gray-100  dark:bg-gray-500/10'    },
-    Drizzle:      { label: 'Drizzle',      icon: 'fa-cloud-drizzle',      colorClass: 'text-sky-400',     bgClass: 'bg-sky-50    dark:bg-sky-500/10'     },
-    Rain:         { label: 'Rain',         icon: 'fa-cloud-rain',         colorClass: 'text-blue-500',    bgClass: 'bg-blue-50   dark:bg-blue-500/10'    },
-    Snow:         { label: 'Snow',         icon: 'fa-snowflake',          colorClass: 'text-cyan-400',    bgClass: 'bg-cyan-50   dark:bg-cyan-500/10'    },
-    Showers:      { label: 'Showers',      icon: 'fa-cloud-showers-heavy',colorClass: 'text-indigo-500',  bgClass: 'bg-indigo-50 dark:bg-indigo-500/10'  },
-    Thunderstorm: { label: 'Thunderstorm', icon: 'fa-bolt',               colorClass: 'text-yellow-500',  bgClass: 'bg-yellow-50 dark:bg-yellow-500/10'  },
-    Unknown:      { label: 'Unknown',      icon: 'fa-circle-question',    colorClass: 'text-gray-400',    bgClass: 'bg-gray-50   dark:bg-gray-500/5'     },
+    Clear:        { label: 'Trời Quang Đãng (Clear)',        icon: 'fa-sun',                colorClass: 'text-amber-500',   bgClass: 'bg-amber-50  dark:bg-amber-500/10'   },
+    Cloudy:       { label: 'Nhiều Mây (Cloudy)',       icon: 'fa-cloud',              colorClass: 'text-gray-400',    bgClass: 'bg-gray-100  dark:bg-gray-500/10'    },
+    Foggy:        { label: 'Có Sương Mù (Foggy)',        icon: 'fa-smog',               colorClass: 'text-gray-500',    bgClass: 'bg-gray-100  dark:bg-gray-500/10'    },
+    Drizzle:      { label: 'Mưa Phùn (Drizzle)',      icon: 'fa-cloud-drizzle',      colorClass: 'text-sky-400',     bgClass: 'bg-sky-50    dark:bg-sky-500/10'     },
+    Rain:         { label: 'Mưa Thường (Rain)',         icon: 'fa-cloud-rain',         colorClass: 'text-blue-500',    bgClass: 'bg-blue-50   dark:bg-blue-500/10'    },
+    Snow:         { label: 'Có Tuyết (Snow)',          icon: 'fa-snowflake',          colorClass: 'text-cyan-400',    bgClass: 'bg-cyan-50   dark:bg-cyan-500/10'    },
+    Showers:      { label: 'Mưa Rào Lớn (Showers)',      icon: 'fa-cloud-showers-heavy',colorClass: 'text-indigo-500',  bgClass: 'bg-indigo-50 dark:bg-indigo-500/10'  },
+    Thunderstorm: { label: 'Mưa Giông Sét (Thunderstorm)', icon: 'fa-bolt',               colorClass: 'text-yellow-500',  bgClass: 'bg-yellow-50 dark:bg-yellow-500/10'  },
+    Unknown:      { label: 'Chưa Xác Định (Unknown)',      icon: 'fa-circle-question',    colorClass: 'text-gray-400',    bgClass: 'bg-gray-50   dark:bg-gray-500/5'     },
 };
 
 /** Map a WMO weather code to a WeatherCategory. Null/undefined → Unknown. */

@@ -21,9 +21,9 @@ interface AiSummaryPanelProps {
 }
 
 const TREND_CONFIG = {
-    warming: { label: 'Warming', Icon: TrendingUp, color: 'text-red-400' },
-    cooling: { label: 'Cooling', Icon: TrendingDown, color: 'text-blue-400' },
-    stable: { label: 'Stable', Icon: Minus, color: 'text-emerald-400' },
+    warming: { label: 'Ấm Lên (Warming)', Icon: TrendingUp, color: 'text-red-400' },
+    cooling: { label: 'Lạnh Đi (Cooling)', Icon: TrendingDown, color: 'text-blue-400' },
+    stable: { label: 'Ổn Định (Stable)', Icon: Minus, color: 'text-emerald-400' },
 } as const;
 
 // Labels matching the 4-question prompt structure
@@ -97,10 +97,10 @@ export default function AiSummaryPanel({ cityId }: AiSummaryPanelProps) {
             <div className={`p-6 rounded-xl border shadow-sm ${isDark ? 'bg-[#1e1e1e] border-[#2a2a2a]' : 'bg-white border-gray-200'}`}>
                 <div className="flex items-center gap-2 mb-2">
                     <Sparkles className="w-5 h-5 text-blue-600" />
-                    <h3 className={`font-semibold text-lg ${isDark ? 'text-white' : 'text-gray-800'}`}>AI Analysis &amp; Summary</h3>
+                    <h3 className={`font-semibold text-lg ${isDark ? 'text-white' : 'text-gray-800'}`}>Phân Tích &amp; Tóm Tắt Từ AI</h3>
                 </div>
                 <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                    Chọn thành phố để xem phân tích AI.
+                    Chọn thành phố từ bộ lọc phía trên để xem phân tích thời tiết tự động từ AI.
                 </p>
             </div>
         );
@@ -152,7 +152,7 @@ export default function AiSummaryPanel({ cityId }: AiSummaryPanelProps) {
             {/* AI badge */}
             <div className="absolute top-3 right-3 z-20">
                 <span className={`inline-flex items-center rounded px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest ${isDark ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30' : 'bg-cyan-100 text-cyan-700 border border-cyan-200'}`}>
-                    AI GENERATED
+                    Tạo bởi AI
                 </span>
             </div>
 
@@ -164,7 +164,7 @@ export default function AiSummaryPanel({ cityId }: AiSummaryPanelProps) {
                     <div className="flex items-center gap-2">
                         <Sparkles className="w-5 h-5 text-blue-600" />
                         <h3 className={`font-semibold text-lg ${isDark ? 'text-white' : 'text-gray-800'}`}>
-                            AI Analysis &amp; Summary
+                            Tóm Tắt & Phân Tích Thời Tiết AI
                         </h3>
                     </div>
                     <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider bg-blue-100 dark:bg-blue-500/20 dark:text-blue-300 px-2.5 py-1 rounded-full mr-20">
@@ -177,7 +177,7 @@ export default function AiSummaryPanel({ cityId }: AiSummaryPanelProps) {
                     <div className="flex items-center gap-1.5">
                         <CalendarDays className={`w-3.5 h-3.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`} />
                         <span className={`text-[10px] font-semibold ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
-                            {summary.period_days}d period
+                            Chu kỳ {summary.period_days} ngày
                         </span>
                     </div>
 
@@ -193,7 +193,7 @@ export default function AiSummaryPanel({ cityId }: AiSummaryPanelProps) {
                     <div className="flex items-center gap-1.5">
                         <AlertTriangle className={`w-3.5 h-3.5 ${summary.anomaly_count > 0 ? 'text-amber-400' : isDark ? 'text-gray-500' : 'text-gray-400'}`} />
                         <span className={`text-[10px] font-semibold ${summary.anomaly_count > 0 ? 'text-amber-400' : isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-                            {summary.anomaly_count} anomal{summary.anomaly_count === 1 ? 'y' : 'ies'}
+                            Phát hiện {summary.anomaly_count} ngày bất thường
                         </span>
                     </div>
                 </div>

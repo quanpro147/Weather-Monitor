@@ -12,6 +12,7 @@ import math
 import warnings
 
 import numpy as np
+from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
 
 
@@ -94,10 +95,10 @@ def forecast_temperature(
 ) -> list[dict]:
     """
     Forecast daily mean temperature for the next `days_ahead` days.
-    Uses Holt-Winters Triple Exponential Smoothing with weekly seasonality (period=7)
+    Uses Seasonal ARIMA (SARIMA) with weekly seasonality (order=(1, 0, 1), seasonal_order=(1, 0, 1, 7))
     to generate realistic, oscillating weather forecasts.
     Cleans/imputes historical outliers before fitting the model to prevent distortion.
-    Falls back to Holt's Double Exponential Smoothing or Linear Regression in case of failure.
+    Falls back to Holt-Winters, Holt's Double Exponential Smoothing, or Linear Regression in case of failure.
     """
     if len(records) < 30:
         return []
@@ -107,49 +108,73 @@ def forecast_temperature(
     cleaned_values = _clean_outliers(values)
 
     last_date = datetime.date.fromisoformat(records[-1]["date"])
-    method = "holt-winters"
+    method = "arima"
 
-    # Detect near-constant series (variance < 0.01°C²) — Holt-Winters is unstable there
+    # Detect near-constant series (variance < 0.01°C²) — ARIMA is unstable there
     if float(np.var(cleaned_values)) < 0.01:
-        preds, sigma = _linear_extrapolate(cleaned_values, days_ahead)
+        preds, std_val = _linear_extrapolate(cleaned_values, days_ahead)
+        sigma = [std_val] * days_ahead
         method = "linear"
     else:
         try:
             with warnings.catch_warnings():
                 warnings.filterwarnings("ignore")
-                model = ExponentialSmoothing(
-                    cleaned_values,
-                    trend="add",
-                    seasonal="add",
-                    seasonal_periods=7,
-                    initialization_method="estimated"
-                )
+                # Fit ARIMA with weekly seasonality (SARIMAX)
+                model = ARIMA(cleaned_values, order=(1, 0, 1), seasonal_order=(1, 0, 1, 7))
                 fit_model = model.fit()
-                predictions_raw = fit_model.forecast(days_ahead)
-                preds = [float(p) for p in predictions_raw]
                 
-                fitted = fit_model.fittedvalues
-                residuals = np.array(cleaned_values) - np.array(fitted)
-                sigma = float(np.std(residuals))
-        except Exception as e:
-            # Fallback to Holt's Double Exponential Smoothing if Holt-Winters fails
-            fitted, last_level, last_trend = _holt_smooth(cleaned_values, alpha=alpha, beta=beta)
-            residuals = np.array(cleaned_values) - np.array(fitted)
-            sigma = float(np.std(residuals))
-
-            preds = []
-            for h in range(1, days_ahead + 1):
-                preds.append(last_level + h * last_trend)
-            method = "holt"
+                # Forecast
+                forecast_res = fit_model.get_forecast(days_ahead)
+                preds = [float(p) for p in forecast_res.predicted_mean]
+                sigma = [float(s) for s in forecast_res.se_mean]
+        except Exception as arima_err:
+            # Fallback 1: Holt-Winters (Triple Exponential Smoothing)
+            try:
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore")
+                    model = ExponentialSmoothing(
+                        cleaned_values,
+                        trend="add",
+                        seasonal="add",
+                        seasonal_periods=7,
+                        initialization_method="estimated"
+                    )
+                    fit_model = model.fit()
+                    predictions_raw = fit_model.forecast(days_ahead)
+                    preds = [float(p) for p in predictions_raw]
+                    
+                    fitted = fit_model.fittedvalues
+                    residuals = np.array(cleaned_values) - np.array(fitted)
+                    std_val = float(np.std(residuals))
+                    sigma = [std_val] * days_ahead
+                    method = "holt-winters"
+            except Exception as hw_err:
+                # Fallback 2: Holt's Double Exponential Smoothing if Holt-Winters fails
+                try:
+                    fitted, last_level, last_trend = _holt_smooth(cleaned_values, alpha=alpha, beta=beta)
+                    residuals = np.array(cleaned_values) - np.array(fitted)
+                    std_val = float(np.std(residuals))
+                    
+                    preds = []
+                    for h in range(1, days_ahead + 1):
+                        preds.append(last_level + h * last_trend)
+                    sigma = [std_val] * days_ahead
+                    method = "holt"
+                except Exception as holt_err:
+                    # Fallback 3: Linear regression
+                    preds, std_val = _linear_extrapolate(cleaned_values, days_ahead)
+                    sigma = [std_val] * days_ahead
+                    method = "linear"
 
     results: list[dict] = []
     for i, pred in enumerate(preds):
         future_date = last_date + datetime.timedelta(days=i + 1)
+        s = sigma[i] if isinstance(sigma, list) else sigma
         results.append({
             "date": str(future_date),
             "predicted_temperature": round(pred, 2),
-            "confidence_lower": round(pred - sigma, 2),
-            "confidence_upper": round(pred + sigma, 2),
+            "confidence_lower": round(pred - s, 2),
+            "confidence_upper": round(pred + s, 2),
             "method": method,
         })
 

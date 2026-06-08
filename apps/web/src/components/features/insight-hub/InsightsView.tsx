@@ -243,14 +243,18 @@ export default function InsightsView() {
             <section className={`p-6 ${surface}`}>
                 <div className="mb-4 flex items-center justify-between">
                     <div>
-                        <h3 className={heading}>Dự Báo Xu Hướng Nhiệt Độ 7 Ngày Tới (Holt-Winters)</h3>
+                        <h3 className={heading}>Dự Báo Xu Hướng Nhiệt Độ 7 Ngày Tới (ARIMA)</h3>
                         <p className={subheading}>
                             Biểu đồ xu hướng nhiệt độ lịch sử kết hợp đường dự báo chu kỳ tuần tự nhiên (nét đứt) và dải tin cậy sai số có thể xảy ra (vùng bóng mờ).
                         </p>
                     </div>
                     {forecastData && forecastData.length > 0 && (
                         <span className={`text-[9px] font-bold uppercase px-2 py-1 rounded ${isDark ? 'bg-cyan-500/15 text-cyan-300' : 'bg-cyan-100 text-cyan-700'}`}>
-                            Mô hình: {forecastData[0].method === 'holt-winters' ? 'Holt-Winters (Mùa tuần)' : forecastData[0].method}
+                            Mô hình: {
+                                forecastData[0].method === 'arima' ? 'ARIMA (Tự hồi quy mùa vụ)' :
+                                forecastData[0].method === 'holt-winters' ? 'Holt-Winters (Mùa tuần)' :
+                                forecastData[0].method
+                            }
                         </span>
                     )}
                 </div>

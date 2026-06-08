@@ -7,7 +7,7 @@ class ForecastPoint(BaseModel):
     predicted_temperature: float
     confidence_lower: float = 0.0
     confidence_upper: float = 0.0
-    method: str = "holt"
+    method: str = "arima"
 
 
 class ForecastResponse(BaseModel):

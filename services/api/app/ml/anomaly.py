@@ -1,6 +1,8 @@
 import warnings
 
+import numpy as np
 import pandas as pd
+from sklearn.decomposition import PCA
 from sklearn.ensemble import IsolationForest
 from sklearn.preprocessing import StandardScaler
 
@@ -30,6 +32,30 @@ MIN_RECORDS = 14
 FALLBACK_SCORE_THRESHOLD = 2.0
 
 
+def _pca_coords(X: np.ndarray) -> np.ndarray | None:
+    """
+    Project a standardized feature matrix down to 2 components for visualization.
+
+    The Isolation Forest decides in the full N-dimensional FEATURES space, so a
+    2-feature scatter (e.g. temp vs humidity) can show an outlier sitting in the
+    middle of the normal cloud. PCA projects that same N-D space onto the two
+    directions of greatest variance, so flagged points naturally fall to the
+    edges — keeping the picture consistent with the model's judgment.
+
+    Returns an (n_samples, 2) array, or None when there isn't enough data.
+    """
+    n_samples, n_features = X.shape
+    n_components = min(2, n_features, n_samples)
+    if n_components < 1:
+        return None
+
+    coords = PCA(n_components=n_components, random_state=42).fit_transform(X)
+    # Always hand back two columns so callers can index pc1/pc2 unconditionally.
+    if coords.shape[1] == 1:
+        coords = np.hstack([coords, np.zeros((n_samples, 1))])
+    return coords
+
+
 def _zscore_fallback(records: list[dict]) -> list[dict]:
     """
     Simple per-feature z-score fallback for when there are too few records
@@ -38,7 +64,10 @@ def _zscore_fallback(records: list[dict]) -> list[dict]:
     from the mean of the available records.
     """
     if len(records) < 3:
-        return [{**r, "anomaly_score": 0.0, "is_anomaly": False} for r in records]
+        return [
+            {**r, "anomaly_score": 0.0, "is_anomaly": False, "pc1": None, "pc2": None}
+            for r in records
+        ]
 
     df = pd.DataFrame(records)
     feature_df = df.loc[:, [f for f in FEATURES if f in df.columns]].apply(
@@ -46,14 +75,19 @@ def _zscore_fallback(records: list[dict]) -> list[dict]:
     )
     means = feature_df.mean()
     stds = feature_df.std().replace(0, 1)  # avoid div-by-zero on constant columns
-    z_scores = ((feature_df - means) / stds).abs()
-    max_z = z_scores.max(axis=1).fillna(0)
+    signed_z = (feature_df - means) / stds
+    max_z = signed_z.abs().max(axis=1).fillna(0)
+
+    # Reuse the standardized matrix for the 2-D projection (same space as scoring).
+    coords = _pca_coords(signed_z.fillna(0.0).to_numpy())
 
     return [
         {
             **records[i],
             "anomaly_score": round(float(max_z.iloc[i]), 4),
             "is_anomaly": bool(max_z.iloc[i] > FALLBACK_SCORE_THRESHOLD),
+            "pc1": round(float(coords[i, 0]), 4) if coords is not None else None,
+            "pc2": round(float(coords[i, 1]), 4) if coords is not None else None,
         }
         for i in range(len(records))
     ]
@@ -110,11 +144,16 @@ def detect_anomalies(records: list[dict]) -> list[dict]:
     predictions = model.predict(X)  # -1 = anomaly, 1 = normal
     anomaly_scores = -raw_scores
 
+    # 2-D projection of the SAME scaled matrix the model scored, for the scatter plot.
+    coords = _pca_coords(X)
+
     return [
         {
             **records[i],
             "anomaly_score": round(float(anomaly_scores[i]), 4),
             "is_anomaly": bool(predictions[i] == -1),
+            "pc1": round(float(coords[i, 0]), 4) if coords is not None else None,
+            "pc2": round(float(coords[i, 1]), 4) if coords is not None else None,
         }
         for i in range(len(records))
     ]

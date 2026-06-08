@@ -134,15 +134,28 @@ END $$;
 
 -- ── RPC functions ────────────────────────────────────────────────────────────
 -- Trả về MAX(date) cho mỗi city — dùng bởi pipeline để chỉ fetch ngày còn thiếu.
+-- Dùng LATERAL + index (city_id, date) để mỗi city chỉ làm 1 index-seek
+-- (ORDER BY date DESC LIMIT 1) thay vì full-table GROUP BY — tránh statement
+-- timeout (57014) trên bảng lớn (~1.35M rows). Chỉ trả city đã có dữ liệu.
 CREATE OR REPLACE FUNCTION public.get_city_latest_dates()
 RETURNS TABLE(city_id INTEGER, max_date DATE)
 LANGUAGE sql
 SECURITY DEFINER
 AS $$
-    SELECT city_id, MAX(date)::DATE AS max_date
-    FROM public.weather_daily
-    GROUP BY city_id;
+    SELECT c.city_id, w.max_date
+    FROM public.cities c
+    CROSS JOIN LATERAL (
+        SELECT wd.date AS max_date
+        FROM public.weather_daily wd
+        WHERE wd.city_id = c.city_id
+        ORDER BY wd.date DESC
+        LIMIT 1
+    ) w;
 $$;
+
+-- Lớp bảo hiểm: cho phép function chạy lâu hơn statement_timeout mặc định
+-- của Supabase (~8s) trong trường hợp DB đang chịu tải nặng.
+ALTER FUNCTION public.get_city_latest_dates() SET statement_timeout = '120s';
 
 -- Trả về các city có ít nhất 1 row aqi IS NULL — dùng bởi backfill_aqi.py.
 CREATE OR REPLACE FUNCTION public.get_cities_needing_aqi_backfill()

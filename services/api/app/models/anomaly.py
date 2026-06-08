@@ -16,6 +16,11 @@ class AnomalyRecord(BaseModel):
     anomaly_score: float   # higher = more anomalous
     is_anomaly: bool
 
+    # 2-D PCA projection of the full feature space, for the scatter visualization.
+    # None when there were too few records to compute a projection.
+    pc1: float | None = None
+    pc2: float | None = None
+
     # Key features returned for frontend context
     temperature_2m_max: float | None = None
     temperature_2m_min: float | None = None

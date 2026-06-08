@@ -15,22 +15,18 @@ import { useTheme } from '../../../contexts/ThemeContext';
 import { useGlobalFilter } from '../../../hooks/useGlobalFilter';
 import { useAnomalyData } from '../../../hooks/useAnomalyData';
 import { useWeatherData } from '../../../hooks/useWeatherData';
-import { useWeatherClassification } from '../../../hooks/useWeatherClassification';
-import { listCities } from '../../../services/city.service';
 import { getWeatherAdvisory } from '../../../services/weather.service';
 import { getForecast } from '../../../services/forecast.service';
 import type { AdvisoryResponse } from '../../../types/weather';
-import type { City } from '../../../types/city';
 import AiSummaryPanel from './AiSummaryPanel';
 import AnomalyScatterChart from './AnomalyScatterChart';
 import type { ScatterPoint } from './AnomalyScatterChart';
 import AnomalyTimeline from './AnomalyTimeline';
 import AlertList from './AlertList';
-import WeatherClassificationPanel from './WeatherClassificationPanel';
 
 export default function InsightsView() {
     const { isDark } = useTheme();
-    const { cityId, scopeMode, startDate, endDate, setCityId } = useGlobalFilter();
+    const { cityId, startDate, endDate } = useGlobalFilter();
     const [advisory, setAdvisory] = React.useState<AdvisoryResponse | null>(null);
     const [advisoryLoading, setAdvisoryLoading] = React.useState(false);
     const [advisoryError, setAdvisoryError] = React.useState<string | null>(null);
@@ -40,20 +36,6 @@ export default function InsightsView() {
         const id = setTimeout(() => setChartReady(true), 100);
         return () => clearTimeout(id);
     }, []);
-
-    /* ── City list — share cache key with StationsView but include own fetcher
-         so this page works even when StationsView has never been visited.    */
-    const { data: cities } = useSWR<City[]>(
-        `stations:cities:${scopeMode}`,
-        async () => {
-            if (scopeMode === 'vietnam') {
-                const data = await listCities({ country: 'Viet Nam', limit: 200 });
-                return data.length > 0 ? data : listCities({ country: 'Vietnam', limit: 200 });
-            }
-            return listCities({ limit: 1000 });
-        },
-        { revalidateOnFocus: false, dedupingInterval: 300_000 },
-    );
 
     /* ── Anomaly data ────────────────────────────────────────────────────── */
     const {
@@ -86,37 +68,24 @@ export default function InsightsView() {
         { revalidateOnFocus: false, dedupingInterval: 3_600_000 },
     );
 
-    /* ── Weather classification (bulk) ───────────────────────────────────── */
-    const {
-        distribution,
-        totalCities,
-        isLoading: classificationLoading,
-        error: classificationError,
-    } = useWeatherClassification(cities ?? []);
-
-    /* ── Scatter chart data ──────────────────────────────────────────────── */
+    /* ── Scatter chart data ──────────────────────────────────────────────────
+       Plot the 2-D PCA projection (pc1 × pc2) computed by the backend on the
+       SAME 7-feature space Isolation Forest scores, so flagged points land at
+       the edges instead of looking lost inside the normal cloud. Temp/humidity
+       are kept only for the tooltip's real-world context.                      */
     const scatterChartData = React.useMemo<ScatterPoint[]>(() => {
-        if (history.length === 0) return [];
-
-        const anomalyByDate = new Map(anomalyRecords.map((r) => [r.date, r]));
-
-        return history
-            .map((dayData) => {
-                const temp = dayData.temperature_2m_max ?? dayData.temperature_2m_mean ?? dayData.temperature_2m_min;
-                const humidity = dayData.relative_humidity_2m_mean;
-                if (temp === null || temp === undefined || humidity === null || humidity === undefined) return null;
-
-                const anomalyDetail = anomalyByDate.get(dayData.date);
-                return {
-                    temp,
-                    humidity,
-                    is_anomaly: anomalyDetail?.is_anomaly ?? false,
-                    anomaly_score: anomalyDetail?.anomaly_score ?? 0,
-                    date: dayData.date,
-                };
-            })
-            .filter((item): item is ScatterPoint => item !== null);
-    }, [anomalyRecords, history]);
+        return anomalyRecords
+            .filter((r) => r.pc1 != null && r.pc2 != null)  // != null also drops stale cache rows lacking pc1/pc2
+            .map((r) => ({
+                pc1: r.pc1 as number,
+                pc2: r.pc2 as number,
+                temp: r.temperature_2m_max ?? r.temperature_2m_mean ?? r.temperature_2m_min,
+                humidity: r.relative_humidity_2m_mean,
+                is_anomaly: r.is_anomaly,
+                anomaly_score: r.anomaly_score,
+                date: r.date,
+            }));
+    }, [anomalyRecords]);
 
     /* ── Forecast chart data: merge history + forecast ───────────────────── */
     const forecastChartData = React.useMemo(() => {
@@ -191,15 +160,6 @@ export default function InsightsView() {
                 </div>
             )}
 
-            {/* ── ROW 0: Weather Classification Overview (bulk, scope-wide) ── */}
-            <WeatherClassificationPanel
-                distribution={distribution}
-                totalCities={totalCities}
-                isLoading={classificationLoading}
-                error={classificationError}
-                onCityClick={(id) => setCityId(id)}
-            />
-
             {/* ── ROW 1: LLM Summary ───────────────────────────────────────── */}
             <section className={`p-6 ${surface}`}>
                 <div className="flex flex-col gap-1.5 mb-4">
@@ -220,7 +180,7 @@ export default function InsightsView() {
                     <div className="mb-6 flex items-center justify-between">
                         <div>
                             <h3 className={heading}>Phát Hiện Thời Tiết Bất Thường Bằng AI (Anomaly Detection)</h3>
-                            <p className={subheading}>Mô hình Isolation Forest tự động khoanh vùng các ngày có sự kết hợp nhiệt độ và độ ẩm dị biệt (Màu đỏ: Dị biệt cực đoan, Màu xanh: Bình thường).</p>
+                            <p className={subheading}>Mô hình Isolation Forest xét đồng thời 7 yếu tố (nhiệt độ, mưa, gió, độ ẩm, mây…) để khoanh vùng ngày dị biệt. Biểu đồ chiếu không gian 7 chiều đó xuống 2 trục tổng hợp (PCA) — điểm đỏ (bất thường) tự dạt ra rìa, điểm xanh (bình thường) tụ ở giữa.</p>
                         </div>
                     </div>
                     <div className="flex-1 bg-gray-50 dark:bg-[#151515] rounded-xl border border-gray-100 dark:border-[#2a2a2a] p-2">

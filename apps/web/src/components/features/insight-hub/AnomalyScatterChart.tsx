@@ -1,11 +1,13 @@
 import React from 'react';
-import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea } from 'recharts';
+import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Label } from 'recharts';
 import { useTheme } from '../../../contexts/ThemeContext';
 import type { ISODateString } from '../../../types/common';
 
 export interface ScatterPoint {
-    temp: number;
-    humidity: number;
+    pc1: number;            // PCA component 1 — plotted on X
+    pc2: number;            // PCA component 2 — plotted on Y
+    temp: number | null;    // real-world context for the tooltip only
+    humidity: number | null;
     is_anomaly: boolean;
     anomaly_score: number;
     date: ISODateString;
@@ -30,7 +32,13 @@ export default function AnomalyScatterChart({ data }: AnomalyScatterChartProps) 
                         {data.is_anomaly ? '⚠️ PHÁT HIỆN BẤT THƯỜNG' : '✅ THỜI TIẾT BÌNH THƯỜNG'}
                     </p>
                     <p className={`text-xs font-bold ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Ngày: {data.date}</p>
-                    <p className={`text-xs font-bold ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Nhiệt độ: {data.temp.toFixed(1)}°C | Độ ẩm: {data.humidity.toFixed(1)}%</p>
+                    {(data.temp !== null || data.humidity !== null) && (
+                        <p className={`text-xs font-bold ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                            {data.temp !== null && `Nhiệt độ: ${data.temp.toFixed(1)}°C`}
+                            {data.temp !== null && data.humidity !== null && ' | '}
+                            {data.humidity !== null && `Độ ẩm: ${data.humidity.toFixed(1)}%`}
+                        </p>
+                    )}
                     <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold mt-2 ${isDark ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20' : 'bg-cyan-50 text-cyan-600 border border-cyan-200'}`}>
                         Điểm bất thường (AI Score): {data.anomaly_score.toFixed(3)}
                     </span>
@@ -43,15 +51,16 @@ export default function AnomalyScatterChart({ data }: AnomalyScatterChartProps) 
     return (
         <div className="relative h-[350px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-                <ScatterChart margin={{ top: 20, right: 20, bottom: 10, left: -10 }}>
+                <ScatterChart margin={{ top: 20, right: 20, bottom: 24, left: 6 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#334155" : "#e2e8f0"} strokeOpacity={0.15} />
-                    <XAxis type="number" dataKey="temp" name="Temperature" unit="°C" stroke={isDark ? "#9ca3af" : "#64748b"} tick={{fontSize: 10}} tickMargin={8} />
-                    <YAxis type="number" dataKey="humidity" name="Humidity" unit="%" stroke={isDark ? "#9ca3af" : "#64748b"} tick={{fontSize: 10}} tickMargin={8} />
+                    <XAxis type="number" dataKey="pc1" name="pc1" domain={['auto', 'auto']} stroke={isDark ? "#9ca3af" : "#64748b"} tick={{fontSize: 10}} tickMargin={8} tickFormatter={(v: number) => v.toFixed(1)}>
+                        <Label value="pc1" position="insideBottom" offset={-14} style={{ fontSize: 11, fontWeight: 700, fill: isDark ? '#9ca3af' : '#64748b' }} />
+                    </XAxis>
+                    <YAxis type="number" dataKey="pc2" name="pc2" domain={['auto', 'auto']} stroke={isDark ? "#9ca3af" : "#64748b"} tick={{fontSize: 10}} tickMargin={8} tickFormatter={(v: number) => v.toFixed(1)}>
+                        <Label value="pc2" angle={-90} position="insideLeft" offset={16} style={{ fontSize: 11, fontWeight: 700, fill: isDark ? '#9ca3af' : '#64748b', textAnchor: 'middle' }} />
+                    </YAxis>
                     <Tooltip content={<CustomTooltip />} cursor={{ strokeDasharray: '3 3' }} />
-                    
-                    {/* Vùng an toàn (Safe Zone) */}
-                    <ReferenceArea x1={18} x2={34} y1={45} y2={75} fill={isDark ? "#10b981" : "#34d399"} fillOpacity={0.15} />
-                    
+
                     {/* Vẽ điểm bình thường */}
                     <Scatter name="Bình thường" data={normalData} fill="#06b6d4" opacity={0.6} />
                     

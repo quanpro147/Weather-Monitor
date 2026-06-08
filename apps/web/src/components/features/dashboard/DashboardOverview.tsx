@@ -287,7 +287,7 @@ export default function DashboardOverview({ isDark = true }: DashboardOverviewPr
             tempActual: null,
             anomalyTemp: null,
             tempForecast: f.predicted_temperature,
-            rainfall: 0,
+            rainfall: null, // Tương lai không có dữ liệu mưa thực -> không vẽ đường xanh cho ngày dự báo
             aqi: null,
         }));
 

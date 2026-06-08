@@ -4,6 +4,8 @@ export interface AnomalyRecord {
 	date: ISODateString;
 	anomaly_score: number;
 	is_anomaly: boolean;
+	pc1: number | null;
+	pc2: number | null;
 	temperature_2m_max: number | null;
 	temperature_2m_min: number | null;
 	temperature_2m_mean: number | null;

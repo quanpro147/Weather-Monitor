@@ -103,7 +103,7 @@ source .venv/bin/activate
 
 ### Bước 4: Chạy Backend API (dev local)
 
-> Đảm bảo Redis đang chạy (`docker compose up -d redis`) và venv đã kích hoạt.
+> Đảm bảo venv đã kích hoạt.
 
 ```bash
 uv run uvicorn services.api.main:app --reload --host 0.0.0.0 --port 8000

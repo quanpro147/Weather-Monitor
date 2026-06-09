@@ -146,7 +146,7 @@ export default function InsightsView() {
             <div className="flex items-center justify-between shrink-0">
                 <div>
                     <h2 className={`text-xl font-black tracking-tight ${isDark ? 'text-[#f3f4f6]' : 'text-gray-900'}`}>
-                        AI Insights &amp; Diagnostics
+                        AI Insights &amp; Alerts
                     </h2>
                     <p className={`text-xs font-medium mt-1 ${isDark ? 'text-[#9ca3af]' : 'text-gray-500'}`}>
                         Powered by Gemini 2.5 Flash &amp; Isolation Forest ML
@@ -156,7 +156,7 @@ export default function InsightsView() {
 
             {cityId === null && (
                 <div className={`rounded-xl border p-3 text-sm ${isDark ? 'border-[#2a2d33] text-gray-300 bg-[#1e1e1e]' : 'border-gray-200 text-gray-700 bg-white'}`}>
-                    Chọn thành phố từ bộ lọc trên cùng để xem AI Insight và Anomaly Diagnostics.
+                    Chọn thành phố từ bộ lọc trên cùng để xem AI Insights và cảnh báo thời tiết.
                 </div>
             )}
 
